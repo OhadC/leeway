@@ -103,7 +103,7 @@ import { defineConfig } from "vite";
 import config from "./leeway.json" with { type: "json" };
 
 export default defineConfig({
-    plugins: [leeway({ config, port: "PORT_WEB", preview: "PORT_WEB" })],
+    plugins: [leeway({ config, port: "PORT_WEB" })],
 });
 ```
 
@@ -115,8 +115,9 @@ leeway({ port: "PORT_WEB" });
 
 The plugin:
 
-- sets `server.port` (and `preview.port` when `preview` is given) from `devPorts`, with `strictPort: true`, so a taken port fails loudly
-  instead of drifting to port+1;
+- sets `server.port` and `preview.port` from `devPorts`, with `strictPort: true`, so a taken port fails loudly instead of drifting to
+  port+1. `vite preview` uses the `port` name too; name another with `preview` for an app that runs its preview beside its dev server
+  (`leeway({ config, port: "PORT_WEB", preview: "PORT_PREVIEW" })`);
 - on `vite serve`, defines `__LEEWAY_ENV__` with every catalogue port, so `devPorts(config)` in browser code sees the same ports as the
   server. Builds keep default ports unless you pass `alwaysInject: true`.
 
@@ -133,7 +134,13 @@ Runs `<command>` with every catalogue port in its environment.
 | `--inherit` | `devPorts`: the ports in the environment, else default ports; the agent guard applies |
 
 `--inherit` is for scripts that are run by others: started under `leeway` they follow its ports, claimed or default, and on their own
-they get default ports. Neither touches the registry. The no-flag and `--default` modes print the port table on stderr.
+they get default ports. Neither touches the registry. The no-flag and `--default` modes print the port table on stderr, once per
+tree (see below).
+
+A nested call is decided by the outermost one. `leeway` hands its folder down in `LEEWAY_FOLDER` with the ports, and a no-flag call
+for the same folder under it runs on the ports it was handed, without claiming again or printing a second table. So in
+`leeway --default concurrently "pnpm dev" ...`, where `dev` is `leeway vite`, vite gets the default ports. A no-flag call for another
+folder still claims its own range, and an explicit `--default` or `--inherit` keeps its meaning at any depth.
 
 ```json
 {
@@ -168,7 +175,7 @@ stdout carries only `export NAME=port` lines; the port table and warnings go to 
 says so: restart anything still on the old ports. Use it as `eval "$(leeway env --export)"` to give a shell its range, after which
 `devPorts` and tools started without `leeway` pick the ports up.
 
-### `leeway list`
+### `leeway list [--json]`
 
 Every registered range on the machine, from every repo, with the pid listening on each port, followed by orphans: listeners in the pool
 outside every range (for example a server left behind by a deleted worktree).
@@ -182,10 +189,34 @@ orphans (in the pool, outside every range)
   21007  pid 5532
 ```
 
+`--json` prints the same as JSON, for tools; read this rather than the registry, which may list deleted folders:
+
+```json
+{
+    "ranges": [
+        {
+            "folder": "/home/me/app",
+            "start": 21000,
+            "end": 21001,
+            "ports": [
+                { "name": "PORT_WEB", "port": 21000, "pids": [4120] },
+                { "name": "PORT_API", "port": 21001, "pids": [] }
+            ]
+        }
+    ],
+    "orphans": [{ "port": 21007, "pid": 5532 }]
+}
+```
+
+`folder` is lowercased on Windows.
+
 ### `leeway kill [<port>]`
 
-Kills every process tree listening in this folder's range, or with a port, in the range that contains it (any repo's). A pool port
-outside every range is an orphan: `leeway kill <port>` kills just the listeners on that port. Ports outside the pool are refused.
+Kills every process tree listening in this folder's range, or with a port, in the range that contains it (any repo's). A listener started
+under `leeway` is killed with the nearest `leeway` run above it and that run's whole tree, so a watcher between them (`tsx watch`,
+`nodemon`) can't restart it; that takes down whatever else the run started too, like a `tsc --watch` beside the server under the same
+`concurrently`. A pool port outside every range is an orphan: `leeway kill <port>` kills just the listeners on that port, never their run.
+Ports outside the pool are refused.
 
 ## Agents
 
@@ -224,6 +255,8 @@ This is why `leeway env --export` prints nothing but plain `export NAME=port` li
 - The pool is not configurable, and there is no `leeway init`: write `leeway.json` by hand.
 - `leeway list` and `leeway kill` scan listeners with PowerShell on Windows, `ss` on Linux and `lsof` on macOS. Without root on Linux and macOS they see
   only your own processes.
+- `leeway kill` recognises a `leeway` run by its command line (`.../leeway/dist/cli.mjs`). A listener whose `leeway` run is gone is
+  killed alone, so a watcher above it can still restart it.
 
 ## License
 

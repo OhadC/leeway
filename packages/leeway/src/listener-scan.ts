@@ -1,23 +1,15 @@
-import { spawnSync } from "node:child_process";
+import { type CommandRunner, OsCommand } from "./os-command.ts";
 
 export type PortListener = {
     port: number;
     pid: number;
 };
 
-export type CommandResult = {
-    status: number | null;
-    stdout: string;
-    stderr: string;
-};
-
-export type CommandRunner = (file: string, args: readonly string[]) => CommandResult;
-
 const WINDOWS_SCAN_SCRIPT =
     "Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Select-Object LocalPort,OwningProcess | ConvertTo-Csv -NoTypeInformation";
 
 export class ListenerScan {
-    static listeners(platform: NodeJS.Platform = process.platform, run: CommandRunner = runCommand): PortListener[] {
+    static listeners(platform: NodeJS.Platform = process.platform, run: CommandRunner = OsCommand.run): PortListener[] {
         const scanned = ListenerScan.scan(platform, run);
         const distinct = new Map(scanned.map(listener => [`${listener.port}:${listener.pid}`, listener]));
 
@@ -26,30 +18,18 @@ export class ListenerScan {
 
     private static scan(platform: NodeJS.Platform, run: CommandRunner): PortListener[] {
         if (platform === "win32") {
-            return ListenerScan.windowsListeners(
-                ListenerScan.output(run, "powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_SCAN_SCRIPT]),
-            );
+            return ListenerScan.windowsListeners(OsCommand.powershell(run, WINDOWS_SCAN_SCRIPT));
         }
 
         if (platform === "linux") {
-            return ListenerScan.linuxListeners(ListenerScan.output(run, "ss", ["-ltnpH"]));
+            return ListenerScan.linuxListeners(OsCommand.output(run, "ss", ["-ltnpH"]));
         }
 
         if (platform === "darwin") {
-            return ListenerScan.macListeners(ListenerScan.output(run, "lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-Fpn"], [0, 1]));
+            return ListenerScan.macListeners(OsCommand.output(run, "lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-Fpn"], [0, 1]));
         }
 
         throw new Error(`leeway: listing listeners is not supported on ${platform} yet`);
-    }
-
-    private static output(run: CommandRunner, file: string, args: readonly string[], fineStatuses: readonly number[] = [0]): string {
-        const { status, stdout, stderr } = run(file, args);
-
-        if (status === null || !fineStatuses.includes(status)) {
-            throw new Error(`leeway: ${file} failed: ${stderr.trim() || `exit status ${status}`}`);
-        }
-
-        return stdout;
     }
 
     private static windowsListeners(csv: string): PortListener[] {
@@ -83,10 +63,4 @@ export class ListenerScan {
             return port === undefined ? [] : [{ port: Number(port), pid }];
         });
     }
-}
-
-function runCommand(file: string, args: readonly string[]): CommandResult {
-    const result = spawnSync(file, args, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
-
-    return { status: result.status, stdout: result.stdout, stderr: result.error?.message ?? result.stderr };
 }

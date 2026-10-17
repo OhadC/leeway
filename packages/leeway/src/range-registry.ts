@@ -83,9 +83,11 @@ export class RangeRegistry {
     }
 
     static entryOfFolder(entries: RangeEntry[], folder: string, platform: NodeJS.Platform): RangeEntry | undefined {
-        const key = RangeRegistry.folderKey(folder, platform);
+        return entries.find(entry => RangeRegistry.isSameFolder(entry.folder, folder, platform));
+    }
 
-        return entries.find(entry => RangeRegistry.folderKey(entry.folder, platform) === key);
+    static isSameFolder(left: string, right: string, platform: NodeJS.Platform): boolean {
+        return RangeRegistry.folderKey(left, platform) === RangeRegistry.folderKey(right, platform);
     }
 
     static entryOfPort(entries: RangeEntry[], port: number): RangeEntry | undefined {

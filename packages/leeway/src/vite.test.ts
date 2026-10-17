@@ -8,6 +8,7 @@ import { leeway } from "./vite.ts";
 const leewayConfig = { ports: { PORT_WEB: { port: 5173 }, PORT_API: { port: 3001 } } };
 const serve: ConfigEnv = { command: "serve", mode: "development" };
 const build: ConfigEnv = { command: "build", mode: "production" };
+const preview: ConfigEnv = { command: "serve", mode: "production", isPreview: true };
 
 const folders: string[] = [];
 
@@ -37,10 +38,12 @@ describe("leeway vite plugin", () => {
         expect(config.preview).toEqual({ port: 3001, strictPort: true });
     });
 
-    it("leaves preview alone when no preview port is named", () => {
-        const config = configOf(leeway({ config: leewayConfig, port: "PORT_WEB" }), {}, serve);
+    it("previews on the dev server's port, strictly, when no preview port is named", () => {
+        vi.stubEnv("PORT_WEB", "24555");
 
-        expect(config.preview).toBeUndefined();
+        const config = configOf(leeway({ config: leewayConfig, port: "PORT_WEB" }), {}, preview);
+
+        expect(config.preview).toEqual({ port: 24555, strictPort: true });
     });
 
     it("injects every resolved port into the served code", () => {

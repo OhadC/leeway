@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import type { FoundConfig } from "./config-file.ts";
+import { devPorts, type LeewayEnv } from "./dev-ports.ts";
 import { type RangeEntry, RangeRegistry } from "./range-registry.ts";
 
 export type FolderClaim = {
@@ -9,6 +10,15 @@ export type FolderClaim = {
 };
 
 export class FolderRange {
+    static readonly FOLDER_VARIABLE = "LEEWAY_FOLDER";
+
+    static inheritedPorts({ folder, config }: FoundConfig, env: LeewayEnv, platform: NodeJS.Platform): Record<string, number> | undefined {
+        const outerFolder = env[FolderRange.FOLDER_VARIABLE];
+        const isSameFolder = typeof outerFolder === "string" && RangeRegistry.isSameFolder(outerFolder, folder, platform);
+
+        return isSameFolder && Object.keys(config.ports).every(name => env[name]) ? devPorts(config, env) : undefined;
+    }
+
     static async claim({ folder, config }: FoundConfig): Promise<FolderClaim> {
         const registryPath = RangeRegistry.defaultPath(os.homedir());
         const previous = RangeRegistry.entryOfFolder(RangeRegistry.livingEntries(registryPath), folder, process.platform);

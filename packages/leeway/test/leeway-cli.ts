@@ -78,6 +78,7 @@ if (-not [Leeway.Console]::GenerateConsoleCtrlEvent(0, 0)) { exit 3 }`,
         "CURSOR_AGENT",
         "AI_AGENT",
         "VITEST",
+        "LEEWAY_FOLDER",
         ...Object.keys(LeewayCli.config.ports),
     ];
 

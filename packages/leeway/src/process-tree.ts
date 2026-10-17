@@ -1,4 +1,23 @@
 import { spawnSync } from "node:child_process";
+import { type CommandRunner, OsCommand } from "./os-command.ts";
+
+export type ProcessRow = {
+    pid: number;
+    parent: number;
+    commandLine: string;
+};
+
+type WindowsProcess = {
+    pid: number;
+    parent: number;
+    started: number;
+    commandLine: string | null;
+};
+
+const WINDOWS_PROCESS_SCRIPT =
+    "ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,CreationDate,CommandLine | ForEach-Object { @{ pid = $_.ProcessId; parent = $_.ParentProcessId; started = $(if ($_.CreationDate) { ([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds() } else { 0 }); commandLine = $_.CommandLine } })";
+
+const LEEWAY_RUN = /[\\/]leeway[\\/](?:dist[\\/]cli\.mjs|src[\\/]cli\.ts)/;
 
 export class ProcessTree {
     static killTreeQuietly(pid: number): void {
@@ -17,13 +36,44 @@ export class ProcessTree {
         }
     }
 
-    static pidsOfTree(pid: number, psTable: string): number[] {
-        const rows = psTable.split("\n").flatMap(line => {
-            const match = /^\s*(\d+)\s+(\d+)\s*$/.exec(line);
+    static killTrees(pids: readonly number[], withRuns: boolean): Map<number, string> {
+        const rows = withRuns && pids.length > 0 ? ProcessTree.rows() : [];
+        const killed = new Set<number>();
+        const failures = new Map<number, string>();
 
-            return match ? [{ pid: Number(match[1]), parent: Number(match[2]) }] : [];
+        pids.forEach(pid => {
+            const top = ProcessTree.leewayRunOf(pid, rows) ?? pid;
+
+            if (killed.has(top)) {
+                return;
+            }
+
+            try {
+                ProcessTree.killTree(top);
+                [top, ...ProcessTree.pidsOfTree(top, rows)].forEach(member => killed.add(member));
+            } catch (error) {
+                failures.set(pid, error instanceof Error ? error.message : String(error));
+            }
         });
 
+        return failures;
+    }
+
+    static rows(platform: NodeJS.Platform = process.platform, run: CommandRunner = OsCommand.run): ProcessRow[] {
+        if (platform === "win32") {
+            return ProcessTree.windowsRows(OsCommand.powershell(run, WINDOWS_PROCESS_SCRIPT));
+        }
+
+        return OsCommand.output(run, "ps", ["-A", "-ww", "-o", "pid=,ppid=,args="])
+            .split("\n")
+            .flatMap(line => {
+                const match = /^\s*(\d+)\s+(\d+) ?(.*)$/.exec(line);
+
+                return match ? [{ pid: Number(match[1]), parent: Number(match[2]), commandLine: match[3] ?? "" }] : [];
+            });
+    }
+
+    static pidsOfTree(pid: number, rows: ProcessRow[]): number[] {
         if (!rows.some(row => row.pid === pid)) {
             return [];
         }
@@ -37,12 +87,39 @@ export class ProcessTree {
         return tree;
     }
 
+    static leewayRunOf(pid: number, rows: ProcessRow[]): number | undefined {
+        const byPid = new Map(rows.map(row => [row.pid, row]));
+        const visited = new Set([pid]);
+
+        for (let current = byPid.get(pid); current && !visited.has(current.parent);) {
+            visited.add(current.parent);
+            current = byPid.get(current.parent);
+
+            if (current && LEEWAY_RUN.test(current.commandLine)) {
+                return current.pid;
+            }
+        }
+
+        return undefined;
+    }
+
     static signalGroup(leaderPid: number, signal: NodeJS.Signals): void {
         try {
             process.kill(-leaderPid, signal);
         } catch {
             return;
         }
+    }
+
+    private static windowsRows(json: string): ProcessRow[] {
+        const processes = JSON.parse(json) as WindowsProcess[];
+        const started = new Map(processes.map(row => [row.pid, row.started]));
+
+        return processes.map(row => ({
+            pid: row.pid,
+            parent: (started.get(row.parent) ?? Infinity) <= row.started ? row.parent : 0,
+            commandLine: row.commandLine ?? "",
+        }));
     }
 
     private static killWindowsTree(pid: number): void {
@@ -54,13 +131,7 @@ export class ProcessTree {
     }
 
     private static killPosixTree(pid: number): void {
-        const ps = spawnSync("ps", ["-A", "-o", "pid=,ppid="], { encoding: "utf8" });
-
-        if (ps.status !== 0) {
-            throw new Error(`leeway: ps failed: ${ps.error?.message ?? ps.stderr.trim()}`);
-        }
-
-        const tree = ProcessTree.pidsOfTree(pid, ps.stdout);
+        const tree = ProcessTree.pidsOfTree(pid, ProcessTree.rows());
 
         if (tree.length === 0) {
             throw new Error(`leeway: no process with pid ${pid}`);

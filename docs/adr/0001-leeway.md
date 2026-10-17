@@ -64,6 +64,12 @@ environment: a claim is cheap and repeatable, and an inherited environment can b
 on the catalogue's default ports without touching the registry; default ports are each repo's own business and may collide across repos.
 `leeway --inherit <command>` takes the ports in the environment, else default ports, so a script run by others follows its caller's mode
 and a nested call never re-decides it.
+The outermost call decides for the whole tree: `leeway` hands its folder down in `LEEWAY_FOLDER` beside the ports, and a no-flag call for
+that same folder runs on the ports it was handed, silently, so composed scripts (`leeway concurrently "pnpm dev" ...` where `dev` is
+`leeway vite`) neither re-claim nor print a second table, and an outer `--default` reaches every inner call. Only a no-flag call defers:
+an explicit `--default` or `--inherit` keeps its meaning, a call for another folder claims its own range, and an environment that lacks
+`LEEWAY_FOLDER` or one of the catalogue's ports is claimed as before. `leeway env --export` sets no `LEEWAY_FOLDER`: an agent session's exported range
+is re-checked by the next claim.
 `env`, `list` and `kill` are reserved; `--` runs a command of that name. `{{NAME}}` in the command becomes the port, for tools that take a
 port only as an argument.
 
@@ -73,8 +79,9 @@ the shell. Stopping leeway stops the tree: on POSIX the command gets its own pro
 it; on Windows, which has no process groups to signal, Ctrl+C, Ctrl+Break and console close run `taskkill /T /F`.
 
 **Browser and vite.** `devPorts` is browser-safe. `leeway/vite` sets `server.port` and `preview.port` with `strictPort`, so a taken port
-fails instead of drifting, and on `serve` defines `__LEEWAY_ENV__` so browser code sees the server's ports. Builds keep default ports unless
-`alwaysInject` is set, so dev ports never leak into a production bundle.
+fails instead of drifting. `preview.port` uses the dev server's port name unless `preview` names another: left alone, vite previews on
+4173 without `strictPort`, so two worktrees' previews collide or drift. On `serve` the plugin defines `__LEEWAY_ENV__` so browser code
+sees the server's ports. Builds keep default ports unless `alwaysInject` is set, so dev ports never leak into a production bundle.
 
 **Agents.** Agents forget rules, so a repo can make forgetting loud. With `"agentGuard": true`, `devPorts` throws in an agent shell (`CLAUDECODE`, `GEMINI_CLI`,
 `CURSOR_AGENT`, `AI_AGENT`) when none of the catalogue's variables are set, except under `VITEST`, where app modules read ports at import
@@ -88,9 +95,16 @@ can't fire.
 
 **Listing and killing scan the OS.** `leeway list` shows every range from every repo with the pid on each port, plus orphans: pool listeners
 outside every living range. A registry-only listing can't tell a running server from a dead registration, which is most of the question.
-`leeway kill [<port>]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in the pool,
-just the listeners on it; it never kills outside the pool. The scan uses PowerShell's
-`Get-NetTCPConnection` on Windows, `ss` on Linux and `lsof` on macOS, behind an injected command runner so parsing is tested on any OS.
+`leeway kill [<port>]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in the pool, just
+the listeners on it; it never kills outside the pool. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
+above it and that run's tree, found by walking parent pids in a fresh process table and recognising the run by its command line
+(`leeway/dist/cli.mjs`). Killing only the listener left watchers (`tsx watch`) alive to restart it on the next file change. An orphan's run
+is spared: it can be a moved range's old server under a run that also serves the current range. Recording each run's pid in the registry was
+rejected: it puts lock contention on every run, leaves stale pids after a hard kill, and a reused pid would kill an unrelated tree; the live
+table has none of that. On Windows a parent pid is ignored when that process started after its child, since Windows reuses the pids of
+exited parents. `leeway list --json` prints the listing for tools, so they never parse the registry or filter out its deleted folders. The
+scan uses PowerShell's `Get-NetTCPConnection` on Windows, `ss` on Linux and `lsof` on macOS, behind an injected command runner so parsing is
+tested on any OS.
 
 **Rejected scope.** No `leeway init`: the catalogue is a few lines written by hand. No configurable pool. No pool compaction.
 

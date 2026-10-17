@@ -25,6 +25,7 @@ describe("RangeKill.planOfFolder", () => {
                 { pid: 70, ports: [21000, 21002] },
                 { pid: 60, ports: [21001] },
             ],
+            withRuns: true,
         });
     });
 
@@ -36,15 +37,16 @@ describe("RangeKill.planOfFolder", () => {
 });
 
 describe("RangeKill.planOfPort", () => {
-    it("targets the whole range containing the port", () => {
+    it("targets the whole range containing the port, with the leeway runs above its listeners", () => {
         expect(RangeKill.planOfPort([APP, TOOL], LISTENERS, 21003)).toEqual({
             scope: "c:\\dev\\tool  21003-21003",
             names: TOOL.ports,
             targets: [{ pid: 80, ports: [21003] }],
+            withRuns: true,
         });
     });
 
-    it("targets only the listeners on an orphan port in the pool", () => {
+    it("targets only the listeners on an orphan port in the pool, without the leeway runs above them", () => {
         const listeners = [...LISTENERS, { port: 25000, pid: 90 }, { port: 25000, pid: 91 }, { port: 25001, pid: 92 }];
 
         expect(RangeKill.planOfPort([APP, TOOL], listeners, 25000)).toEqual({
@@ -54,6 +56,7 @@ describe("RangeKill.planOfPort", () => {
                 { pid: 90, ports: [25000] },
                 { pid: 91, ports: [25000] },
             ],
+            withRuns: false,
         });
     });
 

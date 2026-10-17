@@ -10,6 +10,7 @@ export type KillPlan = {
     scope: string;
     names: Record<string, number>;
     targets: KillTarget[];
+    withRuns: boolean;
 };
 
 export class RangeKill {
@@ -36,7 +37,12 @@ export class RangeKill {
             );
         }
 
-        return { scope: `orphan port ${port}`, names: {}, targets: targetsOf(listeners.filter(listener => listener.port === port)) };
+        return {
+            scope: `orphan port ${port}`,
+            names: {},
+            targets: targetsOf(listeners.filter(listener => listener.port === port)),
+            withRuns: false,
+        };
     }
 
     static render({ scope, names, targets }: KillPlan, failures: Map<number, string>): string {
@@ -60,6 +66,7 @@ export class RangeKill {
             scope: `${entry.folder}  ${entry.start}-${entry.end}`,
             names: entry.ports,
             targets: targetsOf(listeners.filter(listener => listener.port >= entry.start && listener.port <= entry.end)),
+            withRuns: true,
         };
     }
 }

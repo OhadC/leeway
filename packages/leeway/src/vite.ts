@@ -19,11 +19,10 @@ export function leeway<T extends LeewayConfig = LeewayConfig>(options: LeewayVit
 
             const leewayConfig = options.config ?? ConfigFile.find(userConfig.root ?? process.cwd()).config;
             const ports: Record<string, number> = devPorts(leewayConfig);
-            const config: UserConfig = { server: { port: portNamed(ports, options.port), strictPort: true } };
-
-            if (options.preview) {
-                config.preview = { port: portNamed(ports, options.preview), strictPort: true };
-            }
+            const config: UserConfig = {
+                server: { port: portNamed(ports, options.port), strictPort: true },
+                preview: { port: portNamed(ports, options.preview ?? options.port), strictPort: true },
+            };
 
             if (command === "serve" || options.alwaysInject) {
                 config.define = { __LEEWAY_ENV__: JSON.stringify(ports) };

@@ -14,7 +14,7 @@ const USAGE = [
     "usage: leeway [--default | --inherit] [--] <command>   run <command> with this folder's range as env vars; {{NAME}} in <command> becomes its port",
     "                                                       --default: the default ports; --inherit: the ports in the environment, else the default ports",
     "       leeway env --export                             claim this folder's range and print it as export lines",
-    "       leeway list                                     show every range, the pids listening in it, and orphan listeners in the pool",
+    "       leeway list [--json]                            show every range, the pids listening in it, and orphan listeners in the pool",
     "       leeway kill [<port>]                            kill what listens in this folder's range, or in the range holding <port>, or on an orphan <port>",
 ].join("\n");
 
@@ -29,8 +29,10 @@ async function runLeeway(): Promise<void> {
         await execWithPorts(ConfigFile.find(process.cwd()), request);
     } else if (subcommand === "env" && rest.length === 1 && rest[0] === "--export") {
         await printExportLines(ConfigFile.find(process.cwd()));
-    } else if (subcommand === "list" && rest.length === 0) {
-        process.stdout.write(RangeListing.render(RangeListing.collect(RangeRegistry.livingEntries(), ListenerScan.listeners())));
+    } else if (subcommand === "list" && (rest.length === 0 || (rest.length === 1 && rest[0] === "--json"))) {
+        const listing = RangeListing.collect(RangeRegistry.livingEntries(), ListenerScan.listeners());
+
+        process.stdout.write(rest.length === 0 ? RangeListing.render(listing) : `${JSON.stringify(listing, undefined, 4)}\n`);
     } else if (subcommand === "kill" && rest.length <= 1 && rest.every(arg => /^\d+$/.test(arg))) {
         killRange(rest[0]);
     } else {
@@ -41,7 +43,7 @@ async function runLeeway(): Promise<void> {
 async function execWithPorts(found: FoundConfig, { mode, command }: ExecRequest): Promise<void> {
     const ports = await portsOfMode(found, mode);
 
-    RunWithPorts.runAndExit(ExecCommand.commandLine(command, ports), ports);
+    RunWithPorts.runAndExit(ExecCommand.commandLine(command, ports), { ...ports, [FolderRange.FOLDER_VARIABLE]: found.folder });
 }
 
 async function portsOfMode(found: FoundConfig, mode: ExecMode): Promise<Record<string, number>> {
@@ -55,6 +57,12 @@ async function portsOfMode(found: FoundConfig, mode: ExecMode): Promise<Record<s
         process.stderr.write(FolderRange.table(found.folder, ports));
 
         return ports;
+    }
+
+    const inherited = FolderRange.inheritedPorts(found, process.env, process.platform);
+
+    if (inherited) {
+        return inherited;
     }
 
     const claim = await FolderRange.claim(found);
@@ -81,15 +89,10 @@ function killRange(port: string | undefined): void {
         port === undefined
             ? RangeKill.planOfFolder(entries, listeners, ConfigFile.find(process.cwd()).folder, process.platform)
             : RangeKill.planOfPort(entries, listeners, Number(port));
-    const failures = new Map<number, string>();
-
-    plan.targets.forEach(({ pid }) => {
-        try {
-            ProcessTree.killTree(pid);
-        } catch (error) {
-            failures.set(pid, error instanceof Error ? error.message : String(error));
-        }
-    });
+    const failures = ProcessTree.killTrees(
+        plan.targets.map(target => target.pid),
+        plan.withRuns,
+    );
 
     process.stdout.write(RangeKill.render(plan, failures));
 

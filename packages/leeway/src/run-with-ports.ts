@@ -6,14 +6,13 @@ const WINDOWS_STOP_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGBREAK", "SIGHUP"];
 const POSIX_FORWARDED_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
 
 export class RunWithPorts {
-    static runAndExit(commandLine: string, ports: Record<string, number>): void {
+    static runAndExit(commandLine: string, env: Record<string, string | number>): void {
         const isWindows = process.platform === "win32";
-        const portEnv = Object.fromEntries(Object.entries(ports).map(([name, port]) => [name, String(port)]));
         const child = spawn(commandLine, {
             stdio: "inherit",
             shell: true,
             detached: !isWindows,
-            env: { ...process.env, ...portEnv },
+            env: { ...process.env, ...Object.fromEntries(Object.entries(env).map(([name, value]) => [name, String(value)])) },
         });
         const pid = child.pid;
 

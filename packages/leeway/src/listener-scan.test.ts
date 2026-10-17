@@ -1,6 +1,7 @@
 import net from "node:net";
 import { describe, expect, it } from "vitest";
-import { type CommandRunner, ListenerScan } from "./listener-scan.ts";
+import { ListenerScan } from "./listener-scan.ts";
+import type { CommandRunner } from "./os-command.ts";
 import { RangeRegistry } from "./range-registry.ts";
 
 const WINDOWS_CSV = ['"LocalPort","OwningProcess"', '"21001","4321"', '"21000","1234"', ""].join("\r\n");

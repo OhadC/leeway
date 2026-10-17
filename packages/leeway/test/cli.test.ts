@@ -20,10 +20,8 @@ fs.writeFileSync("server.pid", String(process.pid));
 process.on("SIGINT", () => {});
 http.createServer((request, response) => response.end("ok")).listen(process.env.PORT_WEB);
 `,
-    "inherit.mjs": `import { spawnSync } from "node:child_process";
-const args = [${JSON.stringify(LeewayCli.cliPath)}, "--inherit", "node", "-e", ${JSON.stringify(PRINT_PORTS)}, "{{PORT_WEB}}"];
-process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
-`,
+    "inherit.mjs": nestedLeeway("--inherit"),
+    "nested.mjs": nestedLeeway("--"),
 };
 
 const runningLeeways: ChildProcess[] = [];
@@ -133,6 +131,30 @@ describe("leeway <command>", () => {
         expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
     });
 
+    it("a nested claim for the same folder runs on the outer call's ports, claimed or default, without a second table", () => {
+        const { dir, home } = temporaryProject();
+        const claimed = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
+
+        const underClaim = LeewayCli.run(["node", "nested.mjs"], dir, home);
+        const underDefault = LeewayCli.run(["--default", "node", "nested.mjs"], dir, home);
+
+        expect(underClaim.stdout).toBe(`argument ${claimed.PORT_WEB}, env ${claimed.PORT_WEB} ${claimed.PORT_API}\n`);
+        expect(underClaim.stderr.match(/^leeway: /gm)).toHaveLength(1);
+        expect(underDefault.stdout).toBe("argument 5173, env 5173 3001\n");
+        expect(underDefault.stderr.match(/^leeway: /gm)).toHaveLength(1);
+    });
+
+    it("claims under another folder's leeway call", () => {
+        const { dir, home } = temporaryProject();
+        const claimed = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
+        const outer = { LEEWAY_FOLDER: temporaryProject().dir, PORT_WEB: "24000", PORT_API: "24001" };
+
+        const result = LeewayCli.run(["node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, outer);
+
+        expect(result.stdout).toBe(`argument ${claimed.PORT_WEB}, env ${claimed.PORT_WEB} ${claimed.PORT_API}\n`);
+        expect(result.stderr).toContain(`leeway: ports ${claimed.PORT_WEB}-${claimed.PORT_API}`);
+    });
+
     it("--inherit in a nested call follows the outer call's ports, claimed or default", () => {
         const { dir, home } = temporaryProject();
         const claimed = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
@@ -211,6 +233,13 @@ describe.runIf(process.platform === "win32")("leeway <command> on Ctrl+C in its 
         expect(await stopsAnswering(port)).toBe(true);
     }, 30_000);
 });
+
+function nestedLeeway(flag: string): string {
+    return `import { spawnSync } from "node:child_process";
+const args = [${JSON.stringify(LeewayCli.cliPath)}, "${flag}", "node", "-e", ${JSON.stringify(PRINT_PORTS)}, "{{PORT_WEB}}"];
+process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
+`;
+}
 
 function temporaryProject(): { dir: string; home: string } {
     const project = LeewayCli.project();
