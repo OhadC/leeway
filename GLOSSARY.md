@@ -49,6 +49,16 @@ _Avoid_: allocate, assign, lease, reserve
 A range whose folder still exists. Ranges of deleted folders stop counting and are dropped on the next claim.
 _Avoid_: active, valid, stale
 
+### Running
+
+**Mode**:
+How a leeway call picks its ports: claim the folder's range, take the default ports, or inherit the ports already in the environment.
+_Avoid_: flag, strategy, setting
+
+**Placeholder**:
+A port name written as `{{NAME}}` in a command, standing for that port.
+_Avoid_: template, variable, token
+
 ### Processes
 
 **Orphan**:
