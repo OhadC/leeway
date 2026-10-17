@@ -20,6 +20,10 @@ fs.writeFileSync("server.pid", String(process.pid));
 process.on("SIGINT", () => {});
 http.createServer((request, response) => response.end("ok")).listen(process.env.PORT_WEB);
 `,
+    "inherit.mjs": `import { spawnSync } from "node:child_process";
+const args = [${JSON.stringify(LeewayCli.cliPath)}, "--inherit", "node", "-e", ${JSON.stringify(PRINT_PORTS)}, "{{PORT_WEB}}"];
+process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
+`,
 };
 
 const runningLeeways: ChildProcess[] = [];
@@ -92,15 +96,14 @@ describe("leeway <command>", () => {
         expect(await answers(port)).toBe(true);
     });
 
-    it("--defaults puts each default port in place of {{NAME}} and in the env, ignoring the environment and the agent guard", () => {
+    it("--default puts each default port in place of {{NAME}} and in the env, ignoring the environment and the agent guard", () => {
         const { dir, home } = temporaryProject();
 
-        const result = LeewayCli.run(["--defaults", "--", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, {
-            PORT_WEB: "24000",
-            CLAUDECODE: "1",
-        });
+        const result = LeewayCli.run(["--default", "--", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, { PORT_WEB: "24000" });
+        const agent = LeewayCli.run(["--default", "--", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, { CLAUDECODE: "1" });
 
         expect(result.stdout).toBe("argument 5173, env 5173 3001\n");
+        expect(agent.stdout).toBe("argument 5173, env 5173 3001\n");
         expect(result.stderr).toContain("PORT_API  3001");
         expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
     });
@@ -113,18 +116,49 @@ describe("leeway <command>", () => {
         expect(LeewayCli.run(["node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, { PORT_WEB: "24000" }).stdout).toBe(expected);
         expect(LeewayCli.run(["node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, { CLAUDECODE: "1" }).stdout).toBe(expected);
     });
+
+    it("--inherit takes the ports from the environment, else the default ports, without claiming", () => {
+        const { dir, home } = temporaryProject();
+
+        expect(LeewayCli.run(["--inherit", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, { PORT_WEB: "24000" }).stdout).toBe(
+            "argument 24000, env 24000 3001\n",
+        );
+        expect(LeewayCli.run(["--inherit", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home).stdout).toBe(
+            "argument 5173, env 5173 3001\n",
+        );
+        expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
+    });
+
+    it("--inherit in a nested call follows the outer call's ports, claimed or default", () => {
+        const { dir, home } = temporaryProject();
+        const claimed = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
+
+        expect(LeewayCli.run(["node", "inherit.mjs"], dir, home).stdout).toBe(
+            `argument ${claimed.PORT_WEB}, env ${claimed.PORT_WEB} ${claimed.PORT_API}\n`,
+        );
+        expect(LeewayCli.run(["--default", "node", "inherit.mjs"], dir, home).stdout).toBe("argument 5173, env 5173 3001\n");
+    });
 });
 
 describe("leeway errors", () => {
-    it("prints the usage and fails on a missing command or a misused subcommand", () => {
+    it("prints the usage and fails on a missing command, two modes or a misused subcommand", () => {
         const { dir, home } = temporaryProject();
 
-        [[], ["--defaults"], ["env"], ["list", "all"], ["kill", "web"]].forEach(args => {
+        [[], ["--default"], ["--default", "--inherit", "vite"], ["env"], ["list", "all"], ["kill", "web"]].forEach(args => {
             const result = LeewayCli.run(args, dir, home);
 
             expect(result.status).toBe(1);
-            expect(result.stderr).toMatch(/^usage: leeway \[--defaults\]/);
+            expect(result.stderr).toMatch(/^usage: leeway \[--default \| --inherit\]/);
         });
+    });
+
+    it("--inherit refuses default ports to an agent shell that has no ports", () => {
+        const { dir, home } = temporaryProject();
+
+        const result = LeewayCli.run(["--inherit", "node", "-e", "process.exit(0)"], dir, home, { CLAUDECODE: "1" });
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toMatch(/^leeway: agent shell detected/);
     });
 
     it("fails with a leeway: message outside a folder with leeway.json", () => {

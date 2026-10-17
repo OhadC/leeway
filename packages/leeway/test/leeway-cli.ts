@@ -6,6 +6,8 @@ import path from "node:path";
 export class LeewayCli {
     static readonly catalogue = { PORT_WEB: { port: 5173 }, PORT_API: { port: 3001 } };
 
+    static readonly cliPath = path.join(import.meta.dirname, "..", "src", "cli.ts");
+
     static run(args: string[], cwd: string, home: string, extraEnv: Record<string, string> = {}) {
         return spawnSync(process.execPath, [LeewayCli.cliPath, ...args], { cwd, env: LeewayCli.env(home, extraEnv), encoding: "utf8" });
     }
@@ -69,8 +71,6 @@ if (-not [Leeway.Console]::GenerateConsoleCtrlEvent(0, 0)) { exit 3 }`,
                 .map(([name, port]) => [name, Number(port)]),
         );
     }
-
-    private static readonly cliPath = path.join(import.meta.dirname, "..", "src", "cli.ts");
 
     private static readonly inheritedToStrip = [
         "CLAUDECODE",

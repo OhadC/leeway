@@ -10,22 +10,33 @@ describe("ExecCommand.requestOf", () => {
         expect(ExecCommand.requestOf(["--", "vite"])).toEqual({ mode: "claim", command: ["vite"] });
     });
 
-    it("reads --defaults as the mode, with or without --", () => {
-        expect(ExecCommand.requestOf(["--defaults", "vite"])).toEqual({ mode: "defaults", command: ["vite"] });
-        expect(ExecCommand.requestOf(["--defaults", "--", "vite"])).toEqual({ mode: "defaults", command: ["vite"] });
+    it("reads --default and --inherit as the mode, with or without --", () => {
+        expect(ExecCommand.requestOf(["--default", "vite"])).toEqual({ mode: "default", command: ["vite"] });
+        expect(ExecCommand.requestOf(["--default", "--", "vite"])).toEqual({ mode: "default", command: ["vite"] });
+        expect(ExecCommand.requestOf(["--inherit", "vite"])).toEqual({ mode: "inherit", command: ["vite"] });
+        expect(ExecCommand.requestOf(["--inherit", "--", "vite"])).toEqual({ mode: "inherit", command: ["vite"] });
     });
 
     it("leaves flags it does not know, and anything after --, to the command", () => {
         expect(ExecCommand.requestOf(["--watch", "vite"])).toEqual({ mode: "claim", command: ["--watch", "vite"] });
-        expect(ExecCommand.requestOf(["--", "--defaults"])).toEqual({ mode: "claim", command: ["--defaults"] });
-        expect(ExecCommand.requestOf(["--defaults", "--", "--defaults"])).toEqual({ mode: "defaults", command: ["--defaults"] });
+        expect(ExecCommand.requestOf(["--", "--default"])).toEqual({ mode: "claim", command: ["--default"] });
+        expect(ExecCommand.requestOf(["--inherit", "--", "--default"])).toEqual({ mode: "inherit", command: ["--default"] });
+        expect(ExecCommand.requestOf(["pnpm", "--default", "--inherit"])).toEqual({
+            mode: "claim",
+            command: ["pnpm", "--default", "--inherit"],
+        });
+    });
+
+    it("has no request when both modes are given", () => {
+        expect(ExecCommand.requestOf(["--default", "--inherit", "vite"])).toBeUndefined();
+        expect(ExecCommand.requestOf(["--inherit", "--default", "--", "vite"])).toBeUndefined();
     });
 
     it("has no request when the command is missing", () => {
         expect(ExecCommand.requestOf([])).toBeUndefined();
         expect(ExecCommand.requestOf(["--"])).toBeUndefined();
-        expect(ExecCommand.requestOf(["--defaults"])).toBeUndefined();
-        expect(ExecCommand.requestOf(["--defaults", "--"])).toBeUndefined();
+        expect(ExecCommand.requestOf(["--default"])).toBeUndefined();
+        expect(ExecCommand.requestOf(["--inherit", "--"])).toBeUndefined();
     });
 });
 

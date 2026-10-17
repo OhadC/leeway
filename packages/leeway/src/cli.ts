@@ -11,10 +11,11 @@ import { RangeRegistry } from "./range-registry.ts";
 import { RunWithPorts } from "./run-with-ports.ts";
 
 const USAGE = [
-    "usage: leeway [--defaults] [--] <command>   run <command> with this folder's range, or the default ports, as env vars; {{NAME}} in <command> becomes its port",
-    "       leeway env --export                  claim this folder's range and print it as export lines",
-    "       leeway list                          show every range, the pids listening in it, and orphan listeners in the pool",
-    "       leeway kill [<port>]                 kill what listens in this folder's range, or in the range holding <port>, or on an orphan <port>",
+    "usage: leeway [--default | --inherit] [--] <command>   run <command> with this folder's range as env vars; {{NAME}} in <command> becomes its port",
+    "                                                       --default: the default ports; --inherit: the ports in the environment, else the default ports",
+    "       leeway env --export                             claim this folder's range and print it as export lines",
+    "       leeway list                                     show every range, the pids listening in it, and orphan listeners in the pool",
+    "       leeway kill [<port>]                            kill what listens in this folder's range, or in the range holding <port>, or on an orphan <port>",
 ].join("\n");
 
 const SUBCOMMANDS = new Set(["env", "list", "kill"]);
@@ -44,7 +45,11 @@ async function execWithPorts(found: FoundCatalogue, { mode, command }: ExecReque
 }
 
 async function portsOfMode(found: FoundCatalogue, mode: ExecMode): Promise<Record<string, number>> {
-    if (mode === "defaults") {
+    if (mode === "inherit") {
+        return devPorts(found.catalogue);
+    }
+
+    if (mode === "default") {
         const ports = devPorts(found.catalogue, {});
 
         process.stderr.write(FolderRange.table(found.folder, ports));

@@ -109,17 +109,25 @@ The plugin:
 
 ## CLI
 
-### `leeway [--defaults] [--] <command>`
+### `leeway [--default | --inherit] [--] <command>`
 
-Claims this folder's range and runs `<command>` with every port in its environment, whatever ports the environment already has. With
-`--defaults` it runs on the default ports instead, without touching the registry. Either way the port table goes to stderr.
+Runs `<command>` with every catalogue port in its environment.
+
+| mode        | ports                                                                                 |
+| ----------- | ------------------------------------------------------------------------------------- |
+| (no flag)   | this folder's range, claimed in the registry, whatever the environment already has    |
+| `--default` | default ports, ignoring the environment and the agent guard                           |
+| `--inherit` | `devPorts`: the ports in the environment, else default ports; the agent guard applies |
+
+`--inherit` is for scripts that are run by others: started under `leeway` they follow its ports, claimed or default, and on their own
+they get default ports. Neither touches the registry. The no-flag and `--default` modes print the port table on stderr.
 
 ```json
 {
     "scripts": {
         "dev": "leeway vite",
-        "dev:defaults": "leeway --defaults vite",
-        "wait:api": "leeway wait-on tcp:{{PORT_API}}"
+        "dev:default": "leeway --default vite",
+        "wait:api": "leeway --inherit wait-on tcp:{{PORT_API}}"
     }
 }
 ```

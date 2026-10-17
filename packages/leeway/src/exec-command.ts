@@ -1,19 +1,28 @@
-export type ExecMode = "claim" | "defaults";
+export type ExecMode = "claim" | "default" | "inherit";
 
 export type ExecRequest = {
     mode: ExecMode;
     command: readonly string[];
 };
 
+const MODE_FLAGS = new Map<string | undefined, ExecMode>([
+    ["--default", "default"],
+    ["--inherit", "inherit"],
+]);
+
 const SAFE_ARGUMENT = /^[\w\-+=.,/:@%{}]+$/;
 
 export class ExecCommand {
     static requestOf(args: readonly string[]): ExecRequest | undefined {
-        const mode = args[0] === "--defaults" ? "defaults" : "claim";
-        const rest = mode === "defaults" ? args.slice(1) : args;
+        const flagMode = MODE_FLAGS.get(args[0]);
+        const rest = flagMode ? args.slice(1) : args;
         const command = rest[0] === "--" ? rest.slice(1) : rest;
 
-        return command.length > 0 ? { mode, command } : undefined;
+        if (flagMode && MODE_FLAGS.has(rest[0])) {
+            return undefined;
+        }
+
+        return command.length > 0 ? { mode: flagMode ?? "claim", command } : undefined;
     }
 
     static commandLine(command: readonly string[], ports: Record<string, number>, platform: NodeJS.Platform = process.platform): string {

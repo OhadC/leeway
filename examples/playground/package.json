@@ -5,7 +5,11 @@
     "scripts": {
         "dev": "leeway vite",
         "api": "leeway node server.ts",
-        "dev:defaults": "leeway --defaults vite",
+        "dev:default": "leeway --default vite",
+        "both": "leeway pnpm run \"/^serve:/\"",
+        "both:default": "leeway --default pnpm run \"/^serve:/\"",
+        "serve:web": "leeway --inherit vite",
+        "serve:api": "leeway --inherit node server.ts",
         "typecheck": "tsc -p tsconfig.json"
     },
     "dependencies": {

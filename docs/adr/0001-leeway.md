@@ -59,8 +59,10 @@ erases another's claims. A registry with a newer `version` refuses claims ("upda
 than being overwritten.
 
 **Claiming is the default.** `leeway <command>` claims the folder's range and runs the command on it, ignoring ports already in the
-environment: a claim is cheap and repeatable, and an inherited environment can belong to another folder. `leeway --defaults <command>` runs
+environment: a claim is cheap and repeatable, and an inherited environment can belong to another folder. `leeway --default <command>` runs
 on the catalogue's default ports without touching the registry; default ports are each repo's own business and may collide across repos.
+`leeway --inherit <command>` takes the ports in the environment, else default ports, so a script run by others follows its caller's mode
+and a nested call never re-decides it.
 `env`, `list` and `kill` are reserved; `--` runs a command of that name. `{{NAME}}` in the command becomes the port, for tools that take a
 port only as an argument.
 
