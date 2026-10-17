@@ -9,12 +9,12 @@ export type FolderClaim = {
 };
 
 export class FolderRange {
-    static async claim({ root, catalogue }: FoundCatalogue): Promise<FolderClaim> {
+    static async claim({ folder, catalogue }: FoundCatalogue): Promise<FolderClaim> {
         const registryPath = RangeRegistry.defaultPath(os.homedir());
-        const previous = RangeRegistry.entryOfFolder(RangeRegistry.livingEntries(registryPath), root, process.platform);
+        const previous = RangeRegistry.entryOfFolder(RangeRegistry.livingEntries(registryPath), folder, process.platform);
         const entry = await RangeRegistry.claim({
             registryPath,
-            folder: root,
+            folder,
             names: Object.keys(catalogue),
             platform: process.platform,
             pathExists: fs.existsSync,

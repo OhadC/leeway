@@ -98,6 +98,6 @@ just the listeners on it; it never kills outside the pool. The scan uses PowerSh
 - A freed range whose orphaned servers still listen, or a port held by an unrelated process or reserved by the OS, is skipped at claim time.
 - A port can still be taken between the claim and the server binding it; `strictPort` and bind errors make that loud.
 - The pool is never compacted and can fragment; a full pool fails with a message to remove unused folders' ranges.
-- A hard kill of `leeway exec` itself skips its cleanup and can orphan the command tree on any OS; `leeway kill` recovers it.
+- A hard kill of `leeway exec` itself skips its cleanup and can leave the command tree running on any OS; `leeway kill` recovers it.
 - Anything spawned with a scrubbed environment loses its ports, and in an agent shell hits the guard.
 - Reading a vite config no longer shows the port.

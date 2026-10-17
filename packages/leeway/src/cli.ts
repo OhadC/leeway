@@ -49,14 +49,14 @@ async function portsOfMode(found: FoundCatalogue, mode: ExecMode): Promise<Recor
     if (mode === "defaults") {
         const ports = devPorts(found.catalogue, {});
 
-        process.stderr.write(FolderRange.table(found.root, ports));
+        process.stderr.write(FolderRange.table(found.folder, ports));
 
         return ports;
     }
 
     const claim = await FolderRange.claim(found);
 
-    process.stderr.write(FolderRange.table(found.root, claim.entry.ports, claim.entry) + (FolderRange.movedWarning(claim) ?? ""));
+    process.stderr.write(FolderRange.table(found.folder, claim.entry.ports, claim.entry) + (FolderRange.movedWarning(claim) ?? ""));
 
     return claim.entry.ports;
 }
@@ -76,7 +76,7 @@ function killRange(port: string | undefined): void {
     const listeners = ListenerScan.listeners().filter(listener => listener.pid !== process.pid);
     const plan =
         port === undefined
-            ? RangeKill.planOfFolder(entries, listeners, CatalogueFile.find(process.cwd()).root, process.platform)
+            ? RangeKill.planOfFolder(entries, listeners, CatalogueFile.find(process.cwd()).folder, process.platform)
             : RangeKill.planOfPort(entries, listeners, Number(port));
     const failures = new Map<number, string>();
 

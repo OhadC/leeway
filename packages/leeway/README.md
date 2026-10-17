@@ -198,9 +198,9 @@ This is why `leeway env --export` prints nothing but plain `export NAME=port` li
 
 ## Limits
 
-- A hard kill of `leeway exec` itself (SIGKILL, Task Manager, `taskkill /F` on leeway alone) skips its cleanup and can orphan the command
-  tree. Recover with `leeway kill` in that folder.
-- On Windows, a command that exits while leaving background grandchildren behind can orphan them too; `leeway kill` again.
+- A hard kill of `leeway exec` itself (SIGKILL, Task Manager, `taskkill /F` on leeway alone) skips its cleanup and can leave the command
+  tree running. Recover with `leeway kill` in that folder.
+- On Windows, a command that exits while leaving background grandchildren behind can leave them running too; `leeway kill` again.
 - On Linux and macOS the command runs in its own session (that is how it gets its own process group), so it has no controlling terminal:
   it still reads keys from stdin, but tools that open `/dev/tty` directly (some password prompts, full-screen TUIs) fail.
 - A port can be taken between the claim and your server binding it. `strictPort` and bind errors make that a loud failure, not a silent

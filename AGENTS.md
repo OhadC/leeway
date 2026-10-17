@@ -24,3 +24,17 @@ Per-folder dev port ranges. `packages/leeway` is the library + CLI; `examples/pl
 ## Navigating TS symbols
 
 Use LSP, not grep: `ToolSearch select:LSP`, then `workspaceSymbol` with the symbol name and `filePath` = an existing `.ts` file, then position ops (`goToDefinition`, `findReferences`, `incomingCalls`, `hover`, `documentSymbol`).
+
+## Agent skills
+
+### Issue tracker
+
+Local markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.

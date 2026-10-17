@@ -5,7 +5,7 @@ import type { LeewayCatalogue } from "./dev-ports.ts";
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export type FoundCatalogue = {
-    root: string;
+    folder: string;
     catalogue: LeewayCatalogue;
 };
 
@@ -13,16 +13,16 @@ export class CatalogueFile {
     static readonly NAME = "leeway.json";
 
     static find(from: string): FoundCatalogue {
-        const root = CatalogueFile.rootOf(from);
+        const folder = CatalogueFile.folderOf(from);
 
-        if (!root) {
+        if (!folder) {
             throw new Error(`leeway: no ${CatalogueFile.NAME} in ${path.resolve(from)} or any folder above it`);
         }
 
-        return { root, catalogue: CatalogueFile.read(path.join(root, CatalogueFile.NAME)) };
+        return { folder, catalogue: CatalogueFile.read(path.join(folder, CatalogueFile.NAME)) };
     }
 
-    private static rootOf(from: string): string | undefined {
+    private static folderOf(from: string): string | undefined {
         let current = path.resolve(from);
 
         while (!fs.existsSync(path.join(current, CatalogueFile.NAME))) {
