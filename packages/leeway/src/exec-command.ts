@@ -10,19 +10,30 @@ const MODE_FLAGS = new Map<string | undefined, ExecMode>([
     ["--inherit", "inherit"],
 ]);
 
-const SAFE_ARGUMENT = /^[\w\-+=.,/:@%{}]+$/;
+const SAFE_ARGUMENT = /^[\w\-+=.,/:@]+$/;
+
+const PLACEHOLDER = /\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g;
+
+const CMD_METACHARACTERS = /([()\][%!^"`<>&|;, *?])/g;
 
 export class ExecCommand {
     static requestOf(args: readonly string[]): ExecRequest | undefined {
         const flagMode = MODE_FLAGS.get(args[0]);
         const rest = flagMode ? args.slice(1) : args;
-        const command = rest[0] === "--" ? rest.slice(1) : rest;
 
-        if (flagMode && MODE_FLAGS.has(rest[0])) {
+        if (rest[0] !== "--" && rest[0]?.startsWith("-")) {
             return undefined;
         }
 
+        const command = rest[0] === "--" ? rest.slice(1) : rest;
+
         return command.length > 0 ? { mode: flagMode ?? "claim", command } : undefined;
+    }
+
+    static unknownPlaceholders(command: readonly string[], names: readonly string[]): string[] {
+        const found = command.flatMap(arg => [...arg.matchAll(PLACEHOLDER)].map(match => match[1] ?? ""));
+
+        return [...new Set(found)].filter(name => !names.includes(name));
     }
 
     static commandLine(command: readonly string[], ports: Record<string, number>, platform: NodeJS.Platform = process.platform): string {
@@ -36,10 +47,16 @@ export class ExecCommand {
             return arg;
         }
 
-        return platform === "win32" ? `"${arg.replaceAll('"', '\\"')}"` : `'${arg.replaceAll("'", "'\\''")}'`;
+        if (platform !== "win32") {
+            return `'${arg.replaceAll("'", "'\\''")}'`;
+        }
+
+        const msvcrtQuoted = `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`;
+
+        return msvcrtQuoted.replace(CMD_METACHARACTERS, "^$1");
     }
 }
 
 function withPorts(arg: string, ports: Record<string, number>): string {
-    return Object.entries(ports).reduce((line, [name, port]) => line.replaceAll(`{{${name}}}`, String(port)), arg);
+    return arg.replace(PLACEHOLDER, (placeholder, name: string) => String(ports[name] ?? placeholder));
 }

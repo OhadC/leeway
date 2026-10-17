@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import fs from "node:fs";
 import { ConfigFile, type FoundConfig } from "./config-file.ts";
 import { devPorts } from "./dev-ports.ts";
 import { ExecCommand, type ExecMode, type ExecRequest } from "./exec-command.ts";
@@ -16,6 +17,7 @@ const USAGE = [
     "       leeway env --export                             claim this folder's range and print it as export lines",
     "       leeway list [--json]                            show every range, the pids listening in it, and orphan listeners in the pool",
     "       leeway kill [<port>]                            kill what listens in this folder's range, or in the range holding <port>, or on an orphan <port>",
+    "       leeway --help | -h | --version",
 ].join("\n");
 
 const SUBCOMMANDS = new Set(["env", "list", "kill"]);
@@ -25,7 +27,13 @@ async function runLeeway(): Promise<void> {
     const [subcommand, ...rest] = args;
     const request = SUBCOMMANDS.has(subcommand ?? "") ? undefined : ExecCommand.requestOf(args);
 
-    if (request) {
+    if (subcommand === "--help" || subcommand === "-h") {
+        process.stdout.write(`${USAGE}\n`);
+    } else if (subcommand === "--version") {
+        const { version } = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+
+        process.stdout.write(`${version}\n`);
+    } else if (request) {
         await execWithPorts(ConfigFile.find(process.cwd()), request);
     } else if (subcommand === "env" && rest.length === 1 && rest[0] === "--export") {
         await printExportLines(ConfigFile.find(process.cwd()));
@@ -41,6 +49,13 @@ async function runLeeway(): Promise<void> {
 }
 
 async function execWithPorts(found: FoundConfig, { mode, command }: ExecRequest): Promise<void> {
+    const names = Object.keys(found.config.ports);
+    const unknown = ExecCommand.unknownPlaceholders(command, names);
+
+    if (unknown.length > 0) {
+        failWith(`leeway: unknown ${unknown.map(name => `{{${name}}}`).join(", ")} in the command; the catalogue has ${names.join(", ")}`);
+    }
+
     const ports = await portsOfMode(found, mode);
 
     RunWithPorts.runAndExit(ExecCommand.commandLine(command, ports), { ...ports, [FolderRange.FOLDER_VARIABLE]: found.folder });

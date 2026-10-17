@@ -152,14 +152,18 @@ folder still claims its own range, and an explicit `--default` or `--inherit` ke
 }
 ```
 
-- `{{NAME}}` anywhere in the command becomes that port.
-- `env`, `list` and `kill` are leeway's own commands; to run a command with one of those names, put `--` first: `leeway -- kill ...`.
+- `{{NAME}}` anywhere in the command becomes that port. A `{{NAME}}` that is not in the catalogue fails before anything is claimed or run.
+- `env`, `list` and `kill` are leeway's own commands, and a flag before the command is leeway's: an unknown one fails with the usage. To
+  run a command with one of those names, or starting with `-`, put `--` first: `leeway -- kill ...`.
 - One argument is a shell line, run as-is: `leeway "vite build && vite preview"`. Several arguments are an argv: each is quoted for the
-  shell when needed, so `leeway node -e "console.log(1)"` runs exactly that.
+  shell when needed, so `leeway node -e "console.log(1)"` runs exactly that. On Windows a `.cmd` shim re-parses its arguments, so an
+  argument holding both `"` and a cmd metacharacter like `&` can still break there.
 - The command runs through the system shell (`sh`, `cmd.exe` on Windows).
 - leeway exits with the command's exit code, or 1 if it died from a signal or could not start.
 - Stopping leeway stops the whole command tree. On Linux and macOS the command runs in its own process group and SIGINT, SIGTERM and SIGHUP
   are forwarded to the group. On Windows, Ctrl+C, Ctrl+Break or closing the console kills the tree with `taskkill /T /F`.
+
+`leeway --help` (or `-h`) prints the usage, `leeway --version` the version.
 
 ### `leeway env --export`
 
@@ -255,7 +259,7 @@ This is why `leeway env --export` prints nothing but plain `export NAME=port` li
 - The pool is not configurable, and there is no `leeway init`: write `leeway.json` by hand.
 - `leeway list` and `leeway kill` scan listeners with PowerShell on Windows, `ss` on Linux and `lsof` on macOS. Without root on Linux and macOS they see
   only your own processes.
-- `leeway kill` recognises a `leeway` run by its command line (`.../leeway/dist/cli.mjs`). A listener whose `leeway` run is gone is
+- `leeway kill` recognises a `leeway` run by its command line (`.../leeway/dist/cli.mjs`, or a `bin/leeway` or `.bin/leeway` link to it). A listener whose `leeway` run is gone is
   killed alone, so a watcher above it can still restart it.
 
 ## License

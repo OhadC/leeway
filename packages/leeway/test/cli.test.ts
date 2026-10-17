@@ -97,6 +97,16 @@ describe("leeway <command>", () => {
         expect(await answers(port)).toBe(true);
     });
 
+    it("hands each argument to the command exactly as given, through the shell", () => {
+        const { dir, home } = temporaryProject();
+        const args = ["a&b", "%PATH%", 'say "hi"', "x^y", "dir\\", 'q\\"z', "a b", "", "(p) <|> !x! $HOME `id`"];
+
+        const result = LeewayCli.run(["--default", "node", "-e", "console.log(JSON.stringify(process.argv.slice(1)))", ...args], dir, home);
+
+        expect(result.stdout).toBe(`${JSON.stringify(args)}\n`);
+        expect(result.status).toBe(0);
+    });
+
     it("--default puts each default port in place of {{NAME}} and in the env, ignoring the environment and the agent guard", () => {
         const { dir, home } = temporaryProject();
         fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify({ ...LeewayCli.config, agentGuard: true }));
@@ -176,6 +186,44 @@ describe("leeway errors", () => {
             expect(result.status).toBe(1);
             expect(result.stderr).toMatch(/^usage: leeway \[--default \| --inherit\]/);
         });
+    });
+
+    it("prints the usage on stdout for --help and -h, and the version for --version, without claiming", () => {
+        const { dir, home } = temporaryProject();
+        const version = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "..", "package.json"), "utf8")).version;
+
+        ["--help", "-h"].forEach(flag => {
+            const result = LeewayCli.run([flag], dir, home);
+
+            expect(result.status).toBe(0);
+            expect(result.stdout).toMatch(/^usage: leeway \[--default \| --inherit\]/);
+        });
+        expect(LeewayCli.run(["--version"], dir, home).stdout).toBe(`${version}\n`);
+        expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
+    });
+
+    it("prints the usage and fails on a flag it does not know before the command, without claiming or running", () => {
+        const { dir, home } = temporaryProject();
+
+        [["--foo"], ["--watch", "node", "-e", "console.log('ran')"], ["--default", "-v"]].forEach(args => {
+            const result = LeewayCli.run(args, dir, home);
+
+            expect(result.status).toBe(1);
+            expect(result.stdout).toBe("");
+            expect(result.stderr).toMatch(/^usage: leeway /);
+        });
+        expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
+    });
+
+    it("fails on a {{NAME}} that is not in the catalogue, naming it and the catalogue, without claiming or running", () => {
+        const { dir, home } = temporaryProject();
+
+        const result = LeewayCli.run(["node", "-e", "console.log(process.argv[1])", "{{PORT_WBE}}"], dir, home);
+
+        expect(result.status).toBe(1);
+        expect(result.stdout).toBe("");
+        expect(result.stderr).toBe("leeway: unknown {{PORT_WBE}} in the command; the catalogue has PORT_WEB, PORT_API\n");
+        expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
     });
 
     it("--inherit gives an agent shell without ports the default ports, unless the config turns the agent guard on", () => {

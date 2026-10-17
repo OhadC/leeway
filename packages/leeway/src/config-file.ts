@@ -20,7 +20,9 @@ export class ConfigFile {
         const folder = ConfigFile.folderOf(from);
 
         if (!folder) {
-            throw new Error(`leeway: no ${ConfigFile.NAME} in ${path.resolve(from)} or any folder above it`);
+            throw new Error(
+                `leeway: no ${ConfigFile.NAME} in ${path.resolve(from)} or any folder above it; create one: { "ports": { "PORT_WEB": { "port": 5173 } } }`,
+            );
         }
 
         return { folder, config: ConfigFile.read(path.join(folder, ConfigFile.NAME)) };
@@ -47,7 +49,7 @@ export class ConfigFile {
             throw new Error(`leeway: ${file} must be an object of { "ports": ${PORTS_SHAPE}, "agentGuard"?: <boolean> }`);
         }
 
-        if (!isObject(content.ports)) {
+        if (!isObject(content.ports) || Object.keys(content.ports).length === 0) {
             throw new Error(`leeway: ${file} needs "ports": ${PORTS_SHAPE}`);
         }
 

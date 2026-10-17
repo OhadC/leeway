@@ -17,14 +17,19 @@ describe("ExecCommand.requestOf", () => {
         expect(ExecCommand.requestOf(["--inherit", "--", "vite"])).toEqual({ mode: "inherit", command: ["vite"] });
     });
 
-    it("leaves flags it does not know, and anything after --, to the command", () => {
-        expect(ExecCommand.requestOf(["--watch", "vite"])).toEqual({ mode: "claim", command: ["--watch", "vite"] });
+    it("leaves anything after the command, and anything after --, to the command", () => {
         expect(ExecCommand.requestOf(["--", "--default"])).toEqual({ mode: "claim", command: ["--default"] });
         expect(ExecCommand.requestOf(["--inherit", "--", "--default"])).toEqual({ mode: "inherit", command: ["--default"] });
         expect(ExecCommand.requestOf(["pnpm", "--default", "--inherit"])).toEqual({
             mode: "claim",
             command: ["pnpm", "--default", "--inherit"],
         });
+    });
+
+    it("has no request when a flag it does not know comes before the command", () => {
+        expect(ExecCommand.requestOf(["--watch", "vite"])).toBeUndefined();
+        expect(ExecCommand.requestOf(["-h"])).toBeUndefined();
+        expect(ExecCommand.requestOf(["--default", "--watch", "vite"])).toBeUndefined();
     });
 
     it("has no request when both modes are given", () => {
@@ -40,6 +45,18 @@ describe("ExecCommand.requestOf", () => {
     });
 });
 
+describe("ExecCommand.unknownPlaceholders", () => {
+    it("names each {{NAME}} that is not in the catalogue, once", () => {
+        expect(
+            ExecCommand.unknownPlaceholders(["echo", "{{PORT_WBE}}", "{{PORT_WEB}}:{{PORT_WBE}}", "--x={{X}}"], ["PORT_WEB", "PORT_API"]),
+        ).toEqual(["PORT_WBE", "X"]);
+    });
+
+    it("ignores braces that are not a {{NAME}} placeholder", () => {
+        expect(ExecCommand.unknownPlaceholders(["docker ps --format '{{.Names}}' {PORT_X} {{1X}}"], ["PORT_WEB"])).toEqual([]);
+    });
+});
+
 describe("ExecCommand.commandLine", () => {
     it("joins the command and puts each port in place of its {{NAME}}, every time it appears", () => {
         expect(
@@ -48,12 +65,6 @@ describe("ExecCommand.commandLine", () => {
                 PORT_API: 21001,
             }),
         ).toBe("vite --port 21000 --proxy http://localhost:21001/21001");
-    });
-
-    it("leaves placeholders that are not in the catalogue alone", () => {
-        expect(ExecCommand.commandLine(["echo", "{{PORT_OTHER}}", "{PORT_WEB}"], { PORT_WEB: 21000 })).toBe(
-            "echo {{PORT_OTHER}} {PORT_WEB}",
-        );
     });
 
     it("takes a single argument as a shell line, as it is apart from the ports", () => {
@@ -76,15 +87,17 @@ describe("ExecCommand.commandLine", () => {
                     "",
                     "$HOME",
                     "C:\\dir",
+                    "%PATH%",
+                    "{a,b}",
                     "--x={{PORT_WEB}}",
                 ],
                 { PORT_WEB: 21000 },
                 "linux",
             ),
-        ).toBe(`node -e 'require('\\''node:http'\\'').createServer().listen(21000)' 'a b' '' '$HOME' 'C:\\dir' --x=21000`);
+        ).toBe(`node -e 'require('\\''node:http'\\'').createServer().listen(21000)' 'a b' '' '$HOME' 'C:\\dir' '%PATH%' '{a,b}' --x=21000`);
     });
 
-    it("quotes each argument for cmd with double quotes, escaping inner double quotes", () => {
+    it("quotes each argument for the C runtime and caret-escapes it for cmd, so cmd sees no quotes, & or %VAR%", () => {
         expect(
             ExecCommand.commandLine(
                 [
@@ -95,11 +108,16 @@ describe("ExecCommand.commandLine", () => {
                     "",
                     "a&b",
                     "C:\\dir",
+                    "dir\\",
+                    'q\\"z',
+                    "%PATH%",
                     "--x={{PORT_WEB}}",
                 ],
                 { PORT_WEB: 21000 },
                 "win32",
             ),
-        ).toBe(`node -e "require('node:http').createServer().listen(21000)" "say \\"hi\\"" "" "a&b" "C:\\dir" --x=21000`);
+        ).toBe(
+            String.raw`node -e ^"require^('node:http'^).createServer^(^).listen^(21000^)^" ^"say^ \^"hi\^"^" ^"^" ^"a^&b^" ^"C:\dir^" ^"dir\\^" ^"q\\\^"z^" ^"^%PATH^%^" --x=21000`,
+        );
     });
 });

@@ -69,6 +69,19 @@ describe("ProcessTree.leewayRunOf", () => {
         expect(ProcessTree.leewayRunOf(710, windowsRows())).toBe(700);
     });
 
+    it("finds a run started through an npm bin link or a global bin, but not another tool named after leeway", () => {
+        const rowsUnder = (commandLine: string): ProcessRow[] => [
+            { pid: 400, parent: 1, commandLine },
+            { pid: 401, parent: 400, commandLine: "node tsx/dist/cli.mjs watch src/main.ts" },
+        ];
+
+        expect(ProcessTree.leewayRunOf(401, rowsUnder("node /x/node_modules/.bin/leeway tsx watch"))).toBe(400);
+        expect(ProcessTree.leewayRunOf(401, rowsUnder("node /usr/local/bin/leeway vite"))).toBe(400);
+        expect(ProcessTree.leewayRunOf(401, rowsUnder("node /x/node_modules/.bin/leeway-foo tsx watch"))).toBeUndefined();
+        expect(ProcessTree.leewayRunOf(401, rowsUnder("node /home/me/leeway tsx watch"))).toBeUndefined();
+        expect(ProcessTree.leewayRunOf(401, rowsUnder("node /x/node_modules/.bin/tsx /home/me/leeway/main.ts"))).toBeUndefined();
+    });
+
     it("finds the inner run of nested leeway runs", () => {
         const rows: ProcessRow[] = [
             ...psRows(),
@@ -115,6 +128,21 @@ describe("ProcessTree.killTree", () => {
     it("throws why a process could not be killed", () => {
         expect(() => ProcessTree.killTree(999_999_999)).toThrow(/999999999/);
     });
+});
+
+describe("ProcessTree.killTrees", () => {
+    it("kills a parent and its child listed side by side without reporting the child, already gone, as a failure", async () => {
+        const parent = spawn(process.execPath, ["-e", PARENT_OF_A_SLEEPER], { stdio: ["ignore", "pipe", "inherit"] });
+        const [line] = await once(readline.createInterface({ input: parent.stdout }), "line");
+        const sleeperPid = Number(line);
+
+        try {
+            expect(ProcessTree.killTrees([parent.pid ?? 0, sleeperPid], false)).toEqual(new Map());
+            await vi.waitFor(() => expect(isRunning(sleeperPid)).toBe(false), { timeout: 5_000 });
+        } finally {
+            [parent.pid ?? 0, sleeperPid].filter(pid => pid > 0 && isRunning(pid)).forEach(pid => process.kill(pid));
+        }
+    }, 15_000);
 });
 
 function psRows(): ProcessRow[] {

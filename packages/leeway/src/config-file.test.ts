@@ -40,7 +40,9 @@ describe("ConfigFile.find", () => {
     it("refuses, naming the starting folder, when no folder above it has a config", () => {
         const folder = tempFolder();
 
-        expect(() => ConfigFile.find(folder)).toThrowError(`leeway: no leeway.json in ${folder} or any folder above it`);
+        expect(() => ConfigFile.find(folder)).toThrowError(
+            `leeway: no leeway.json in ${folder} or any folder above it; create one: { "ports": { "PORT_WEB": { "port": 5173 } } }`,
+        );
     });
 
     it.each([
@@ -58,6 +60,7 @@ describe("ConfigFile.find", () => {
 
     it.each([
         ["no ports", {}],
+        ["an empty catalogue", { ports: {} }],
         ["ports that are not an object", { ports: [{ port: 3000 }] }],
         ["the old flat shape", { PORT_APP: { port: 3000 } }],
     ])("refuses a config with %s", (_, content) => {

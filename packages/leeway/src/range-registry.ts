@@ -11,6 +11,11 @@ export type RangeEntry = {
     ports: Record<string, number>;
 };
 
+export type RangeClaim = {
+    entry: RangeEntry;
+    previous: RangeEntry | undefined;
+};
+
 export type PortBindState = "free" | "in-use" | "unavailable";
 
 export type ClaimRangeOptions = {
@@ -49,7 +54,7 @@ export class RangeRegistry {
         return path.join(home, ".leeway", "ranges.json");
     }
 
-    static async claim(options: ClaimRangeOptions): Promise<RangeEntry> {
+    static async claim(options: ClaimRangeOptions): Promise<RangeClaim> {
         const lockPath = `${options.registryPath}.lock`;
 
         const owner = await RangeRegistry.acquireLock(lockPath, options.now);
@@ -109,7 +114,7 @@ export class RangeRegistry {
         platform,
         pathExists,
         testPort,
-    }: ClaimRangeOptions): Promise<RangeEntry> {
+    }: ClaimRangeOptions): Promise<RangeClaim> {
         const folder = RangeRegistry.folderKey(folderPath, platform);
         const registry = RangeRegistry.read(registryPath);
 
@@ -140,7 +145,7 @@ export class RangeRegistry {
             folders: { ...Object.fromEntries(others), [folder]: range },
         });
 
-        return { folder, ...range };
+        return { entry: { folder, ...range }, previous: current && { folder, ...current } };
     }
 
     private static async acquireLock(lockPath: string, now: ClaimRangeOptions["now"]): Promise<string> {

@@ -2,12 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import type { FoundConfig } from "./config-file.ts";
 import { devPorts, type LeewayEnv } from "./dev-ports.ts";
-import { type RangeEntry, RangeRegistry } from "./range-registry.ts";
-
-export type FolderClaim = {
-    entry: RangeEntry;
-    previous: RangeEntry | undefined;
-};
+import { type RangeClaim, type RangeEntry, RangeRegistry } from "./range-registry.ts";
 
 export class FolderRange {
     static readonly FOLDER_VARIABLE = "LEEWAY_FOLDER";
@@ -19,11 +14,9 @@ export class FolderRange {
         return isSameFolder && Object.keys(config.ports).every(name => env[name]) ? devPorts(config, env) : undefined;
     }
 
-    static async claim({ folder, config }: FoundConfig): Promise<FolderClaim> {
-        const registryPath = RangeRegistry.defaultPath(os.homedir());
-        const previous = RangeRegistry.entryOfFolder(RangeRegistry.livingEntries(registryPath), folder, process.platform);
-        const entry = await RangeRegistry.claim({
-            registryPath,
+    static claim({ folder, config }: FoundConfig): Promise<RangeClaim> {
+        return RangeRegistry.claim({
+            registryPath: RangeRegistry.defaultPath(os.homedir()),
             folder,
             names: Object.keys(config.ports),
             platform: process.platform,
@@ -31,8 +24,6 @@ export class FolderRange {
             testPort: RangeRegistry.testPort,
             now: Date.now,
         });
-
-        return { entry, previous };
     }
 
     static table(folder: string, ports: Record<string, number>, range?: RangeEntry): string {
@@ -43,7 +34,7 @@ export class FolderRange {
         return `leeway: ${heading} for ${folder}\n${rows.join("")}`;
     }
 
-    static movedWarning({ entry, previous }: FolderClaim): string | undefined {
+    static movedWarning({ entry, previous }: RangeClaim): string | undefined {
         return previous && previous.start !== entry.start
             ? `leeway: range moved from ${previous.start}-${previous.end} to ${entry.start}-${entry.end}; restart anything still using the old ports\n`
             : undefined;

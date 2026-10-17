@@ -17,7 +17,7 @@ type WindowsProcess = {
 const WINDOWS_PROCESS_SCRIPT =
     "ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,CreationDate,CommandLine | ForEach-Object { @{ pid = $_.ProcessId; parent = $_.ParentProcessId; started = $(if ($_.CreationDate) { ([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds() } else { 0 }); commandLine = $_.CommandLine } })";
 
-const LEEWAY_RUN = /[\\/]leeway[\\/](?:dist[\\/]cli\.mjs|src[\\/]cli\.ts)/;
+const LEEWAY_RUN = /[\\/]leeway[\\/](?:dist[\\/]cli\.mjs|src[\\/]cli\.ts)|[\\/]\.?bin[\\/]leeway(?:\s|$)/;
 
 export class ProcessTree {
     static killTreeQuietly(pid: number): void {
@@ -52,7 +52,9 @@ export class ProcessTree {
                 ProcessTree.killTree(top);
                 [top, ...ProcessTree.pidsOfTree(top, rows)].forEach(member => killed.add(member));
             } catch (error) {
-                failures.set(pid, error instanceof Error ? error.message : String(error));
+                if (ProcessTree.isRunning(top)) {
+                    failures.set(pid, error instanceof Error ? error.message : String(error));
+                }
             }
         });
 
@@ -120,6 +122,16 @@ export class ProcessTree {
             parent: (started.get(row.parent) ?? Infinity) <= row.started ? row.parent : 0,
             commandLine: row.commandLine ?? "",
         }));
+    }
+
+    private static isRunning(pid: number): boolean {
+        try {
+            process.kill(pid, 0);
+
+            return true;
+        } catch (error) {
+            return (error as NodeJS.ErrnoException).code === "EPERM";
+        }
     }
 
     private static killWindowsTree(pid: number): void {

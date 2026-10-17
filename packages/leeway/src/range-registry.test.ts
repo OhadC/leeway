@@ -16,9 +16,10 @@ describe("RangeRegistry.claim", () => {
         const home = createHome();
         const registryPath = RangeRegistry.defaultPath(home);
 
-        const entry = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C"]);
+        const { entry, previous } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C"]);
 
         expect(entry).toEqual({ folder: "/repo", start: 21000, end: 21002, ports: { PORT_A: 21000, PORT_B: 21001, PORT_C: 21002 } });
+        expect(previous).toBeUndefined();
         expect(JSON.parse(fs.readFileSync(path.join(home, ".leeway", "ranges.json"), "utf8"))).toEqual({
             version: 1,
             folders: { "/repo": { start: 21000, end: 21002, ports: { PORT_A: 21000, PORT_B: 21001, PORT_C: 21002 } } },
@@ -28,12 +29,12 @@ describe("RangeRegistry.claim", () => {
     it("gives a folder the same range on every claim with the same names", async () => {
         const registryPath = createRegistryPath();
         await claim(registryPath, "/other", ["PORT_X"]);
-        const first = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"]);
+        const { entry: first } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"]);
 
         const again = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"]);
 
         expect(first).toEqual({ folder: "/repo", start: 21001, end: 21002, ports: { PORT_A: 21001, PORT_B: 21002 } });
-        expect(again).toEqual(first);
+        expect(again).toEqual({ entry: first, previous: first });
         expect(Object.keys(readRegistry(registryPath).folders)).toEqual(["/other", "/repo"]);
     });
 
@@ -44,7 +45,7 @@ describe("RangeRegistry.claim", () => {
         const large = await claim(registryPath, "/large-repo", ["PORT_W", "PORT_X", "PORT_Y", "PORT_Z"]);
         const third = await claim(registryPath, "/third", ["PORT_A", "PORT_B"]);
 
-        expect([small, large, third].map(({ start, end }) => ({ start, end }))).toEqual([
+        expect([small, large, third].map(({ entry: { start, end } }) => ({ start, end }))).toEqual([
             { start: 21000, end: 21001 },
             { start: 21002, end: 21005 },
             { start: 21006, end: 21007 },
@@ -58,7 +59,7 @@ describe("RangeRegistry.claim", () => {
             folders: { "/deleted": { start: 21000, end: 21001, ports: { PORT_A: 21000, PORT_B: 21001 } }, "/alive": alive },
         });
 
-        const entry = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"], { pathExists: candidate => candidate !== "/deleted" });
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"], { pathExists: candidate => candidate !== "/deleted" });
 
         expect(entry).toEqual({ folder: "/repo", start: 21000, end: 21001, ports: { PORT_A: 21000, PORT_B: 21001 } });
         expect(readRegistry(registryPath).folders).toEqual({
@@ -76,7 +77,7 @@ describe("RangeRegistry.claim", () => {
             },
         });
 
-        const entry = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C"]);
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C"]);
 
         expect(entry).toEqual({ folder: "/repo", start: 21010, end: 21012, ports: { PORT_A: 21010, PORT_B: 21011, PORT_C: 21012 } });
     });
@@ -91,8 +92,9 @@ describe("RangeRegistry.claim", () => {
             },
         });
 
-        const entry = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C", "PORT_D", "PORT_E"]);
+        const { entry, previous } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C", "PORT_D", "PORT_E"]);
 
+        expect(previous).toEqual({ folder: "/repo", start: 21004, end: 21005, ports: { PORT_A: 21004, PORT_B: 21005 } });
         expect(entry).toEqual({
             folder: "/repo",
             start: 21007,
@@ -107,7 +109,7 @@ describe("RangeRegistry.claim", () => {
             folders: { "/repo": { start: 21010, end: 21012, ports: { PORT_A: 21010, PORT_B: 21011, PORT_C: 21012 } } },
         });
 
-        const entry = await claim(registryPath, "/repo", ["PORT_A", "PORT_C"]);
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_C"]);
 
         expect(entry).toEqual({ folder: "/repo", start: 21010, end: 21011, ports: { PORT_A: 21010, PORT_C: 21011 } });
     });
@@ -115,7 +117,7 @@ describe("RangeRegistry.claim", () => {
     it("skips past a port something else holds or the OS reserved to the next start whose ports are all free", async () => {
         const registryPath = createRegistryPath();
 
-        const entry = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"], {
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"], {
             testPort: portStates({ 21001: "in-use", 21003: "unavailable" }),
         });
 
@@ -128,7 +130,7 @@ describe("RangeRegistry.claim", () => {
             folders: { "/repo": { start: 21010, end: 21011, ports: { PORT_A: 21010, PORT_B: 21011 } } },
         });
 
-        const entry = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C"], {
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C"], {
             testPort: portStates({ 21010: "in-use", 21011: "in-use" }),
         });
 
@@ -144,10 +146,11 @@ describe("RangeRegistry.claim", () => {
             },
         });
 
-        const entry = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"], {
+        const { entry, previous } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"], {
             testPort: portStates({ 21010: "in-use", 21011: "unavailable" }),
         });
 
+        expect(previous).toEqual({ folder: "/repo", start: 21010, end: 21011, ports: { PORT_A: 21010, PORT_B: 21011 } });
         expect(entry).toEqual({ folder: "/repo", start: 21002, end: 21003, ports: { PORT_A: 21002, PORT_B: 21003 } });
         expect(readRegistry(registryPath).folders["/repo"]).toEqual({ start: 21002, end: 21003, ports: { PORT_A: 21002, PORT_B: 21003 } });
     });
@@ -161,7 +164,7 @@ describe("RangeRegistry.claim", () => {
         };
         const registryPath = createRegistryPath({ version: 1, folders: unknown });
 
-        const entry = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"]);
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"]);
 
         expect(entry.start).toBe(21000);
         expect(readRegistry(registryPath).folders).toEqual({
@@ -173,8 +176,8 @@ describe("RangeRegistry.claim", () => {
     it("treats differently spelled paths of one Windows folder as one folder", async () => {
         const registryPath = createRegistryPath();
 
-        const first = await claim(registryPath, "C:\\Worktrees\\Repo", ["PORT_A"], { platform: "win32" });
-        const second = await claim(registryPath, "c:/worktrees/repo/", ["PORT_A"], { platform: "win32" });
+        const { entry: first } = await claim(registryPath, "C:\\Worktrees\\Repo", ["PORT_A"], { platform: "win32" });
+        const { entry: second } = await claim(registryPath, "c:/worktrees/repo/", ["PORT_A"], { platform: "win32" });
 
         expect(second).toEqual({ folder: "c:\\worktrees\\repo", start: 21000, end: 21000, ports: { PORT_A: 21000 } });
         expect(second).toEqual(first);
@@ -185,9 +188,10 @@ describe("RangeRegistry.claim", () => {
         const stored = { start: 21010, end: 21010, ports: { PORT_A: 21010 } };
         const registryPath = createRegistryPath({ version: 1, folders: { "C:/Worktrees/Repo/": stored } });
 
-        const entry = await claim(registryPath, "c:\\worktrees\\repo", ["PORT_A"], { platform: "win32" });
+        const { entry, previous } = await claim(registryPath, "c:\\worktrees\\repo", ["PORT_A"], { platform: "win32" });
 
         expect(entry).toEqual({ folder: "c:\\worktrees\\repo", ...stored });
+        expect(previous).toEqual(entry);
         expect(readRegistry(registryPath).folders).toEqual({ "c:\\worktrees\\repo": stored });
     });
 
@@ -197,7 +201,7 @@ describe("RangeRegistry.claim", () => {
         const upper = await claim(registryPath, "/home/dev/Repo", ["PORT_A"]);
         const lower = await claim(registryPath, "/home/dev/repo/", ["PORT_A"]);
 
-        expect([upper.start, lower.start]).toEqual([21000, 21001]);
+        expect([upper.entry.start, lower.entry.start]).toEqual([21000, 21001]);
         expect(Object.keys(readRegistry(registryPath).folders)).toEqual(["/home/dev/Repo", "/home/dev/repo"]);
     });
 
@@ -233,7 +237,9 @@ describe("RangeRegistry.claim", () => {
         await expect(claim(registryPath, "/too-big", ["PORT_A", "PORT_B", "PORT_C", "PORT_D", "PORT_E"])).rejects.toThrow(
             /remove unused folders' ranges/,
         );
-        expect(await claim(registryPath, "/fits", ["PORT_A", "PORT_B", "PORT_C", "PORT_D"])).toMatchObject({ start: 29996, end: 29999 });
+        expect(await claim(registryPath, "/fits", ["PORT_A", "PORT_B", "PORT_C", "PORT_D"])).toMatchObject({
+            entry: { start: 29996, end: 29999 },
+        });
     });
 });
 
@@ -249,15 +255,15 @@ describe("RangeRegistry.claim lock", () => {
         holder.finish();
 
         expect(whileLocked).toBe(false);
-        expect(await holder.claimed).toMatchObject({ start: 21000 });
-        expect(await waiter.claimed).toMatchObject({ start: 21001 });
+        expect(await holder.claimed).toMatchObject({ entry: { start: 21000 } });
+        expect(await waiter.claimed).toMatchObject({ entry: { start: 21001 } });
     });
 
     it("breaks a lock older than about ten seconds, left by a crashed claim", async () => {
         const registryPath = createRegistryPath();
         await heldClaim(registryPath, "/crashed").locked;
 
-        const entry = await claim(registryPath, "/repo", ["PORT_A"], { now: () => Date.now() + 11_000 });
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A"], { now: () => Date.now() + 11_000 });
 
         expect(entry).toEqual({ folder: "/repo", start: 21000, end: 21000, ports: { PORT_A: 21000 } });
     });
@@ -285,7 +291,9 @@ describe("RangeRegistry.claim lock", () => {
 
         await claim(registryPath, "/first", ["PORT_A"]);
 
-        expect(await claim(registryPath, "/repo", ["PORT_A"], { now: () => Date.now() - 60_000 })).toMatchObject({ start: 21001 });
+        expect(await claim(registryPath, "/repo", ["PORT_A"], { now: () => Date.now() - 60_000 })).toMatchObject({
+            entry: { start: 21001 },
+        });
     });
 
     it("releases the lock after a failed claim", async () => {
@@ -293,7 +301,9 @@ describe("RangeRegistry.claim lock", () => {
 
         await expect(claim(registryPath, "/repo", ["PORT_A"])).rejects.toThrow(/update leeway/);
         fs.writeFileSync(registryPath, JSON.stringify({ version: 1, folders: {} }));
-        expect(await claim(registryPath, "/repo", ["PORT_A"], { now: () => Date.now() - 60_000 })).toMatchObject({ start: 21000 });
+        expect(await claim(registryPath, "/repo", ["PORT_A"], { now: () => Date.now() - 60_000 })).toMatchObject({
+            entry: { start: 21000 },
+        });
     });
 });
 
