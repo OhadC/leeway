@@ -14,12 +14,21 @@ const FIXTURES = {
     "launcher.mjs": `import { spawn } from "node:child_process";
 spawn(process.execPath, ["-e", ${JSON.stringify(SERVER)}], { stdio: "inherit" });
 `,
+    "ctrl-c-ignoring-server.mjs": `import fs from "node:fs";
+import http from "node:http";
+fs.writeFileSync("server.pid", String(process.pid));
+process.on("SIGINT", () => {});
+http.createServer((request, response) => response.end("ok")).listen(process.env.PORT_WEB);
+`,
 };
 
 const runningLeeways: ChildProcess[] = [];
 
+const ownConsoleLeeways: { pid: number; dir: string }[] = [];
+
 afterEach(async () => {
     await Promise.all(runningLeeways.splice(0).map(stopLeeway));
+    ownConsoleLeeways.splice(0).forEach(stopOwnConsoleLeeway);
     LeewayCli.removeTemporaryDirs();
 });
 
@@ -83,10 +92,13 @@ describe("leeway exec", () => {
         expect(await answers(port)).toBe(true);
     });
 
-    it("--defaults puts each default port in place of {{NAME}} and in the env, keeping stdout for the command", () => {
+    it("--defaults puts each default port in place of {{NAME}} and in the env, ignoring the environment and the agent guard", () => {
         const { dir, home } = temporaryProject();
 
-        const result = LeewayCli.run(["exec", "--defaults", "--", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home);
+        const result = LeewayCli.run(["exec", "--defaults", "--", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, {
+            PORT_WEB: "24000",
+            CLAUDECODE: "1",
+        });
 
         expect(result.stdout).toBe("argument 5173, env 5173 3001\n");
         expect(result.stderr).toContain("PORT_API  3001");
@@ -150,6 +162,22 @@ describe.skipIf(process.platform === "win32")("leeway exec on a signal", () => {
     });
 });
 
+describe.runIf(process.platform === "win32")("leeway exec on Ctrl+C in its console", () => {
+    it("stops the whole command tree, even a server that ignores Ctrl+C, so nothing is left listening", async () => {
+        const { dir, home } = temporaryProject();
+        const port = Number(LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout).PORT_WEB);
+        const pid = LeewayCli.startInOwnConsole(["exec", "--claim", "--", "node", "ctrl-c-ignoring-server.mjs"], dir, home);
+
+        ownConsoleLeeways.push({ pid, dir });
+
+        expect(await startsAnswering(port)).toBe(true);
+
+        expect(LeewayCli.pressCtrlC(pid)).toBe(0);
+
+        expect(await stopsAnswering(port)).toBe(true);
+    }, 30_000);
+});
+
 function temporaryProject(): { dir: string; home: string } {
     const project = LeewayCli.project();
 
@@ -182,6 +210,16 @@ async function stopLeeway(leeway: ChildProcess): Promise<void> {
     await exited;
 }
 
+function stopOwnConsoleLeeway({ pid, dir }: { pid: number; dir: string }): void {
+    const serverPid = path.join(dir, "server.pid");
+
+    spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
+
+    if (fs.existsSync(serverPid)) {
+        spawnSync("taskkill", ["/PID", fs.readFileSync(serverPid, "utf8"), "/F"], { stdio: "ignore" });
+    }
+}
+
 function listeningPort(leeway: ChildProcess): Promise<number> {
     return new Promise((resolve, reject) => {
         let output = "";
@@ -206,9 +244,17 @@ function answers(port: number): Promise<boolean> {
     });
 }
 
-async function stopsAnswering(port: number): Promise<boolean> {
-    for (const deadline = Date.now() + 2000; Date.now() < deadline;) {
-        if (!(await answers(port))) {
+function startsAnswering(port: number): Promise<boolean> {
+    return reachesAnswering(port, true, 10_000);
+}
+
+function stopsAnswering(port: number): Promise<boolean> {
+    return reachesAnswering(port, false, 2000);
+}
+
+async function reachesAnswering(port: number, answering: boolean, timeoutMs: number): Promise<boolean> {
+    for (const deadline = Date.now() + timeoutMs; Date.now() < deadline;) {
+        if ((await answers(port)) === answering) {
             return true;
         }
 

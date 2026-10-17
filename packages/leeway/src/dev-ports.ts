@@ -18,12 +18,6 @@ export function devPorts<T extends LeewayCatalogue>(catalogue: T, env: LeewayEnv
     return Object.fromEntries(Object.entries(catalogue).map(([name, { port }]) => [name, configuredPort(env[name]) ?? port])) as PortsOf<T>;
 }
 
-export class DefaultPorts {
-    static ports(catalogue: LeewayCatalogue): Record<string, number> {
-        return Object.fromEntries(Object.entries(catalogue).map(([name, { port }]) => [name, port]));
-    }
-}
-
 function configuredPort(value: string | number | undefined): number | undefined {
     const port = Number(value);
 

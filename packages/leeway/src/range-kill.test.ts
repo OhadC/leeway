@@ -19,7 +19,8 @@ describe("RangeKill.planOfFolder", () => {
         const plan = RangeKill.planOfFolder([TOOL, APP], LISTENERS, "C:\\Dev\\App", "win32");
 
         expect(plan).toEqual({
-            entry: APP,
+            scope: "c:\\dev\\app  21000-21002",
+            names: APP.ports,
             targets: [
                 { pid: 70, ports: [21000, 21002] },
                 { pid: 60, ports: [21001] },
@@ -36,12 +37,29 @@ describe("RangeKill.planOfFolder", () => {
 
 describe("RangeKill.planOfPort", () => {
     it("targets the whole range containing the port", () => {
-        expect(RangeKill.planOfPort([APP, TOOL], LISTENERS, 21003)).toEqual({ entry: TOOL, targets: [{ pid: 80, ports: [21003] }] });
+        expect(RangeKill.planOfPort([APP, TOOL], LISTENERS, 21003)).toEqual({
+            scope: "c:\\dev\\tool  21003-21003",
+            names: TOOL.ports,
+            targets: [{ pid: 80, ports: [21003] }],
+        });
     });
 
-    it("refuses a port outside every living range, even when something listens on it", () => {
-        expect(() => RangeKill.planOfPort([APP, TOOL], [...LISTENERS, { port: 25000, pid: 90 }], 25000)).toThrow(
-            "leeway: port 25000 is not in any living range; see `leeway list`",
+    it("targets only the listeners on an orphan port in the pool", () => {
+        const listeners = [...LISTENERS, { port: 25000, pid: 90 }, { port: 25000, pid: 91 }, { port: 25001, pid: 92 }];
+
+        expect(RangeKill.planOfPort([APP, TOOL], listeners, 25000)).toEqual({
+            scope: "orphan port 25000",
+            names: {},
+            targets: [
+                { pid: 90, ports: [25000] },
+                { pid: 91, ports: [25000] },
+            ],
+        });
+    });
+
+    it("refuses a port outside the pool", () => {
+        expect(() => RangeKill.planOfPort([APP], LISTENERS, 3000)).toThrow(
+            "leeway: port 3000 is outside the pool 21000-29999; leeway only kills there",
         );
     });
 });
@@ -57,6 +75,18 @@ describe("RangeKill.render", () => {
                 "  pid 60  api 21001  failed: access denied",
                 "",
             ].join("\n"),
+        );
+    });
+
+    it("reports an orphan port's pids without names", () => {
+        expect(RangeKill.render(RangeKill.planOfPort([], [{ port: 25000, pid: 90 }], 25000), new Map())).toBe(
+            ["leeway: orphan port 25000", "  pid 90  25000  killed", ""].join("\n"),
+        );
+    });
+
+    it("says so when nothing listens on an orphan port", () => {
+        expect(RangeKill.render(RangeKill.planOfPort([], [], 25000), new Map())).toBe(
+            "leeway: nothing is listening in orphan port 25000\n",
         );
     });
 

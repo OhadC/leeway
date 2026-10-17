@@ -92,10 +92,6 @@ export class RangeRegistry {
         return entries.find(entry => port >= entry.start && port <= entry.end);
     }
 
-    static nameOfPort(entry: RangeEntry, port: number): string | undefined {
-        return Object.keys(entry.ports).find(name => entry.ports[name] === port);
-    }
-
     static isInPool(port: number): boolean {
         return port >= RangeRegistry.POOL_START && port <= RangeRegistry.POOL_END;
     }

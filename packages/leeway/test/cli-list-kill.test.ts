@@ -36,6 +36,18 @@ describe("leeway list and kill", () => {
         expect(await accepts(ports.PORT_WEB)).toBe(false);
     }, 60_000);
 
+    it("kills an orphan listening in the pool outside every range", async () => {
+        const { home, ports } = claimedProject();
+        const orphanPort = (ports.PORT_API ?? 0) + 100;
+        const server = await startServer(orphanPort);
+
+        const result = LeewayCli.run(["kill", String(orphanPort)], home, home);
+
+        expect(result.status).toBe(0);
+        expect(result.stdout).toBe(`leeway: orphan port ${orphanPort}\n  pid ${server.pid}  ${orphanPort}  killed\n`);
+        expect(await accepts(orphanPort)).toBe(false);
+    }, 60_000);
+
     it("kills the range holding a given port from any folder", async () => {
         const { home, ports } = claimedProject();
         const server = await startServer(ports.PORT_WEB);

@@ -83,7 +83,8 @@ can't fire.
 
 **Listing and killing scan the OS.** `leeway list` shows every range from every repo with the pid on each port, plus orphans: pool listeners
 outside every living range. A registry-only listing can't tell a running server from a dead registration, which is most of the question.
-`leeway kill [<port>]` kills the listeners in this folder's range or in the range holding the port. The scan uses PowerShell's
+`leeway kill [<port>]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in the pool,
+just the listeners on it; it never kills outside the pool. The scan uses PowerShell's
 `Get-NetTCPConnection` on Windows, `ss` on Linux and `lsof` on macOS, behind an injected command runner so parsing is tested on any OS.
 
 **Rejected scope.** No `leeway init`: the catalogue is a few lines written by hand. No configurable pool. No pool compaction.

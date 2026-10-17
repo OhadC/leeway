@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DefaultPorts, devPorts } from "./dev-ports.ts";
+import { devPorts } from "./dev-ports.ts";
 
 const catalogue = { PORT_WEB: { port: 5173, app: "Web" }, PORT_API: { port: 4100 } };
 
@@ -67,13 +67,5 @@ describe("devPorts default environment", () => {
         vi.stubEnv("PORT_WEB", "21002");
 
         expect(devPorts(catalogue).PORT_WEB).toBe(21002);
-    });
-});
-
-describe("DefaultPorts.ports", () => {
-    it("maps each name to its catalogue port, ignoring the environment", () => {
-        vi.stubEnv("PORT_WEB", "21000");
-
-        expect(DefaultPorts.ports(catalogue)).toEqual({ PORT_WEB: 5173, PORT_API: 4100 });
     });
 });

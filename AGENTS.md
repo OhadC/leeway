@@ -19,7 +19,7 @@ Per-folder dev port ranges. `packages/leeway` is the library + CLI; `examples/pl
 - Keep it simple, YAGNI. No speculative options or abstractions.
 - No "slot" wording anywhere; the concepts are catalogue, range, registry, default ports.
 - Relative imports use the `.ts` extension; TypeScript is erasable-syntax only (no enums, namespaces, parameter properties).
-- OS-dependent code takes injected runners/adapters so its parsing and decisions are unit-tested on any OS.
+- Parsing OS command output takes an injected command runner so it is unit-tested on any OS. Spawning, signalling and killing real processes is not faked: it is covered by real-process tests on each OS (Windows locally, linux via `pnpm test:linux`, mac in CI).
 
 ## Navigating TS symbols
 

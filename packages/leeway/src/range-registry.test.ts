@@ -341,11 +341,9 @@ describe("RangeRegistry lookups", () => {
         expect(RangeRegistry.entryOfFolder([other, repo], "C:/Worktrees/Missing", "win32")).toBeUndefined();
     });
 
-    it("finds the entry whose range holds a port, and the name of that port", () => {
+    it("finds the entry whose range holds a port", () => {
         expect(RangeRegistry.entryOfPort([repo, other], 21002)).toBe(other);
         expect(RangeRegistry.entryOfPort([repo, other], 21003)).toBeUndefined();
-        expect(RangeRegistry.nameOfPort(repo, 21001)).toBe("PORT_B");
-        expect(RangeRegistry.nameOfPort(repo, 21002)).toBeUndefined();
     });
 
     it("tells whether a port is in the 21000-29999 pool", () => {

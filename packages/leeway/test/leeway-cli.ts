@@ -18,6 +18,27 @@ export class LeewayCli {
         });
     }
 
+    static startInOwnConsole(args: string[], cwd: string, home: string): number {
+        const argumentList = [LeewayCli.cliPath, ...args].map(arg => `"${arg}"`).join(" ");
+        const result = LeewayCli.powershell(
+            `[void][Leeway.Console]::SetConsoleCtrlHandler([System.IntPtr]::Zero, $false)
+(Start-Process -FilePath '${process.execPath}' -ArgumentList '${argumentList}' -WorkingDirectory '${cwd}' -WindowStyle Hidden -PassThru).Id`,
+            LeewayCli.env(home, {}),
+        );
+
+        return Number(result.stdout.trim());
+    }
+
+    static pressCtrlC(consolePid: number): number | null {
+        return LeewayCli.powershell(
+            `[void][Leeway.Console]::FreeConsole()
+if (-not [Leeway.Console]::AttachConsole(${consolePid})) { exit 2 }
+[void][Leeway.Console]::SetConsoleCtrlHandler([System.IntPtr]::Zero, $true)
+if (-not [Leeway.Console]::GenerateConsoleCtrlEvent(0, 0)) { exit 3 }`,
+            process.env,
+        ).status;
+    }
+
     static project(): { dir: string; home: string } {
         const dir = LeewayCli.temporaryDir("leeway-project-");
         const home = LeewayCli.temporaryDir("leeway-home-");
@@ -61,6 +82,20 @@ export class LeewayCli {
     ];
 
     private static readonly temporaryDirs: string[] = [];
+
+    private static readonly windowsConsole = `Add-Type -Name Console -Namespace Leeway -MemberDefinition @'
+[DllImport("kernel32.dll")] public static extern bool FreeConsole();
+[DllImport("kernel32.dll")] public static extern bool AttachConsole(uint pid);
+[DllImport("kernel32.dll")] public static extern bool SetConsoleCtrlHandler(System.IntPtr handler, bool add);
+[DllImport("kernel32.dll")] public static extern bool GenerateConsoleCtrlEvent(uint ctrlEvent, uint processGroup);
+'@
+`;
+
+    private static powershell(script: string, env: NodeJS.ProcessEnv) {
+        const encoded = Buffer.from(LeewayCli.windowsConsole + script, "utf16le").toString("base64");
+
+        return spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], { env, encoding: "utf8" });
+    }
 
     private static env(home: string, extraEnv: Record<string, string>): NodeJS.ProcessEnv {
         const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, USERPROFILE: home, ...extraEnv };

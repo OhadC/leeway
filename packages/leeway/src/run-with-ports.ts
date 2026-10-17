@@ -32,10 +32,6 @@ export class RunWithPorts {
         }
 
         child.on("exit", (code, signal) => {
-            if (isWindows) {
-                ProcessTree.killTreeQuietly(pid);
-            }
-
             process.exit(signal ? 1 : (code ?? 1));
         });
     }

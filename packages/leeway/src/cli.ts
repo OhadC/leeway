@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { CatalogueFile, type FoundCatalogue } from "./catalogue-file.ts";
-import { DefaultPorts, devPorts } from "./dev-ports.ts";
+import { devPorts } from "./dev-ports.ts";
 import { ExecCommand, type ExecMode, type ExecRequest } from "./exec-command.ts";
 import { FolderRange } from "./folder-range.ts";
 import { ListenerScan } from "./listener-scan.ts";
@@ -14,7 +14,7 @@ const USAGE = [
     "usage: leeway exec [--claim | --defaults] [--] <command>   run <command> with the ports as env vars; {{NAME}} in <command> becomes its port",
     "       leeway env --export                                 claim this folder's range and print it as export lines",
     "       leeway list                                         show every range, the pids listening in it, and orphan listeners in the pool",
-    "       leeway kill [<port>]                                kill what listens in this folder's range, or in the range holding <port>",
+    "       leeway kill [<port>]                                kill what listens in this folder's range, or in the range holding <port>, or on an orphan <port>",
 ].join("\n");
 
 async function runLeeway(): Promise<void> {
@@ -47,7 +47,7 @@ async function portsOfMode(found: FoundCatalogue, mode: ExecMode): Promise<Recor
     }
 
     if (mode === "defaults") {
-        const ports = DefaultPorts.ports(found.catalogue);
+        const ports = devPorts(found.catalogue, {});
 
         process.stderr.write(FolderRange.table(found.root, ports));
 

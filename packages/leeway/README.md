@@ -82,8 +82,6 @@ catalogue's variables are set, so an agent can't silently start a server on your
 modules often read ports at import time in tests. Codex sets no reliable marker, and Copilot and Aider document none, so for them the
 guard can't fire; tell them to use `leeway exec --claim` (see [Agents](#agents)).
 
-`DefaultPorts.ports(catalogue)` returns the default ports, ignoring the environment.
-
 ## Vite: `leeway/vite`
 
 ```ts
@@ -171,7 +169,8 @@ orphans (in the pool, outside every range)
 
 ### `leeway kill [<port>]`
 
-Kills every process listening in this folder's range, or with a port, in the range that contains it (any repo's).
+Kills every process tree listening in this folder's range, or with a port, in the range that contains it (any repo's). A pool port
+outside every range is an orphan: `leeway kill <port>` kills just the listeners on that port. Ports outside the pool are refused.
 
 ## Agents
 
