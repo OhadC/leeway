@@ -12,7 +12,7 @@ Per-folder dev port ranges. `packages/leeway` is the library + CLI; `examples/pl
 ## Conventions
 
 - No code comments, including doc comments.
-- Specific export names: `LeewayRegistry.claim`, not `claim`; `CatalogueFile.find`, not `find`. No generic `parse`, `getKey`, `utils`.
+- Specific export names: `RangeRegistry.claim`, not `claim`; `CatalogueFile.find`, not `find`. No generic `parse`, `getKey`, `utils`.
 - Prefer one static class per concept over scattered helper functions.
 - Order inside a module: public members first, private members next, module-level helpers at the bottom.
 - Tests must be able to go red on a real bug. No tautological tests (asserting a mock returns what it was told to, or restating the implementation).

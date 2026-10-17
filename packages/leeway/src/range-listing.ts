@@ -1,10 +1,10 @@
 import type { PortListener } from "./listener-scan.ts";
-import { RangeRegistry, type RangeEntries, type RangeEntry } from "./range-registry.ts";
+import { RangeRegistry, type RangeEntry } from "./range-registry.ts";
 
 export type ListedPort = {
     name: string;
     port: number;
-    pid: number | undefined;
+    pids: number[];
 };
 
 export type ListedRange = Omit<RangeEntry, "ports"> & {
@@ -17,7 +17,7 @@ export type Listing = {
 };
 
 export class RangeListing {
-    static collect(entries: RangeEntries, listeners: PortListener[]): Listing {
+    static collect(entries: RangeEntry[], listeners: PortListener[]): Listing {
         const ranges = [...entries]
             .sort((left, right) => left.start - right.start)
             .map(entry => ({
@@ -26,7 +26,11 @@ export class RangeListing {
                 end: entry.end,
                 ports: Object.entries(entry.ports)
                     .sort(([, left], [, right]) => left - right)
-                    .map(([name, port]) => ({ name, port, pid: listeners.find(listener => listener.port === port)?.pid })),
+                    .map(([name, port]) => ({
+                        name,
+                        port,
+                        pids: listeners.filter(listener => listener.port === port).map(listener => listener.pid),
+                    })),
             }));
 
         const orphans = listeners.filter(
@@ -45,7 +49,7 @@ export class RangeListing {
 
         if (orphans.length > 0) {
             blocks.push(
-                ["orphans (in the pool, outside every range)", ...orphans.map(orphan => `  ${orphan.port}  ${pidCell(orphan.pid)}`)].join(
+                ["orphans (in the pool, outside every range)", ...orphans.map(orphan => `  ${orphan.port}  ${pidCell([orphan.pid])}`)].join(
                     "\n",
                 ),
             );
@@ -56,12 +60,12 @@ export class RangeListing {
 
     private static renderRange(range: ListedRange): string {
         const nameWidth = Math.max(...range.ports.map(listed => listed.name.length));
-        const rows = range.ports.map(listed => `  ${listed.name.padEnd(nameWidth)}  ${listed.port}  ${pidCell(listed.pid)}`);
+        const rows = range.ports.map(listed => `  ${listed.name.padEnd(nameWidth)}  ${listed.port}  ${pidCell(listed.pids)}`);
 
         return [`${range.folder}  ${range.start}-${range.end}`, ...rows].join("\n");
     }
 }
 
-function pidCell(pid: number | undefined): string {
-    return pid === undefined ? "-" : `pid ${pid}`;
+function pidCell(pids: number[]): string {
+    return pids.length === 0 ? "-" : `pid ${pids.join(", ")}`;
 }

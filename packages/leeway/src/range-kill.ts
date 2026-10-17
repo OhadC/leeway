@@ -1,5 +1,5 @@
 import type { PortListener } from "./listener-scan.ts";
-import { RangeRegistry, type RangeEntries, type RangeEntry } from "./range-registry.ts";
+import { RangeRegistry, type RangeEntry } from "./range-registry.ts";
 
 export type KillTarget = {
     pid: number;
@@ -12,7 +12,7 @@ export type KillPlan = {
 };
 
 export class RangeKill {
-    static planOfFolder(entries: RangeEntries, listeners: PortListener[], folder: string, platform: NodeJS.Platform): KillPlan {
+    static planOfFolder(entries: RangeEntry[], listeners: PortListener[], folder: string, platform: NodeJS.Platform): KillPlan {
         const entry = RangeRegistry.entryOfFolder(entries, folder, platform);
 
         if (!entry) {
@@ -22,7 +22,7 @@ export class RangeKill {
         return RangeKill.planOfEntry(entry, listeners);
     }
 
-    static planOfPort(entries: RangeEntries, listeners: PortListener[], port: number): KillPlan {
+    static planOfPort(entries: RangeEntry[], listeners: PortListener[], port: number): KillPlan {
         const entry = RangeRegistry.entryOfPort(entries, port);
 
         if (!entry) {

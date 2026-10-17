@@ -1,15 +1,9 @@
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
-import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-
-const CLI = path.join(import.meta.dirname, "..", "src", "cli.ts");
-
-const CATALOGUE = { PORT_WEB: { port: 5173 }, PORT_API: { port: 3001 } };
-
-const INHERITED_TO_STRIP = ["CLAUDECODE", "GEMINI_CLI", "CURSOR_AGENT", "AI_AGENT", "VITEST", ...Object.keys(CATALOGUE)];
+import { LeewayCli } from "./leeway-cli.ts";
 
 const SERVER =
     "require('node:http').createServer((q, s) => s.end('ok')).listen(process.env.PORT_WEB, () => console.log('listening ' + process.env.PORT_WEB))";
@@ -22,26 +16,24 @@ spawn(process.execPath, ["-e", ${JSON.stringify(SERVER)}], { stdio: "inherit" })
 `,
 };
 
-const temporaryDirs: string[] = [];
-
 const runningLeeways: ChildProcess[] = [];
 
 afterEach(async () => {
     await Promise.all(runningLeeways.splice(0).map(stopLeeway));
-    temporaryDirs.splice(0).forEach(dir => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10 }));
+    LeewayCli.removeTemporaryDirs();
 });
 
 describe("leeway env --export", () => {
     it("prints only export lines of ports claimed in the pool, and the same ports on the next call", () => {
         const { dir, home } = temporaryProject();
 
-        const first = runLeeway(["env", "--export"], dir, home);
-        const second = runLeeway(["env", "--export"], dir, home);
+        const first = LeewayCli.run(["env", "--export"], dir, home);
+        const second = LeewayCli.run(["env", "--export"], dir, home);
 
         expect(first.status).toBe(0);
         expect(first.stdout).toMatch(/^(export [A-Z_][A-Z0-9_]*=\d+\n)+$/);
-        expect(Object.keys(exportedPorts(first.stdout))).toEqual(["PORT_WEB", "PORT_API"]);
-        Object.values(exportedPorts(first.stdout)).forEach(port => {
+        expect(Object.keys(LeewayCli.exportedPorts(first.stdout))).toEqual(["PORT_WEB", "PORT_API"]);
+        Object.values(LeewayCli.exportedPorts(first.stdout)).forEach(port => {
             expect(port).toBeGreaterThanOrEqual(21000);
             expect(port).toBeLessThanOrEqual(29999);
         });
@@ -53,22 +45,22 @@ describe("leeway env --export", () => {
         const { dir, home } = temporaryProject();
         const neighbour = temporaryProject().dir;
 
-        const first = exportedPorts(runLeeway(["env", "--export"], dir, home).stdout);
-        runLeeway(["env", "--export"], neighbour, home);
-        fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify({ ...CATALOGUE, PORT_DOCS: { port: 8080 } }));
-        const moved = runLeeway(["env", "--export"], dir, home);
+        const first = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
+        LeewayCli.run(["env", "--export"], neighbour, home);
+        fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify({ ...LeewayCli.catalogue, PORT_DOCS: { port: 8080 } }));
+        const moved = LeewayCli.run(["env", "--export"], dir, home);
 
         expect(moved.stdout).toMatch(/^(export [A-Z_][A-Z0-9_]*=\d+\n){3}$/);
-        expect(exportedPorts(moved.stdout).PORT_WEB).not.toBe(first.PORT_WEB);
+        expect(LeewayCli.exportedPorts(moved.stdout).PORT_WEB).not.toBe(first.PORT_WEB);
         expect(moved.stderr).toContain(`range moved from ${first.PORT_WEB}-${first.PORT_API}`);
     });
 
     it("does not warn when the range stays put", () => {
         const { dir, home } = temporaryProject();
 
-        runLeeway(["env", "--export"], dir, home);
+        LeewayCli.run(["env", "--export"], dir, home);
 
-        expect(runLeeway(["env", "--export"], dir, home).stderr).not.toContain("moved");
+        expect(LeewayCli.run(["env", "--export"], dir, home).stderr).not.toContain("moved");
     });
 });
 
@@ -76,8 +68,8 @@ describe("leeway exec", () => {
     it("exits with the command's exit code", () => {
         const { dir, home } = temporaryProject();
 
-        expect(runLeeway(["exec", "--", "node", "-e", "process.exit(7)"], dir, home).status).toBe(7);
-        expect(runLeeway(["exec", "--claim", "--", "node", "-e", "process.exit(0)"], dir, home).status).toBe(0);
+        expect(LeewayCli.run(["exec", "--", "node", "-e", "process.exit(7)"], dir, home).status).toBe(7);
+        expect(LeewayCli.run(["exec", "--claim", "--", "node", "-e", "process.exit(0)"], dir, home).status).toBe(0);
     });
 
     it("--claim gives the command the claimed ports, and its server answers on one", async () => {
@@ -85,7 +77,7 @@ describe("leeway exec", () => {
         const leeway = startLeeway(["exec", "--claim", "--", "node", "-e", SERVER], dir, home);
 
         const port = await listeningPort(leeway);
-        const claimed = exportedPorts(runLeeway(["env", "--export"], dir, home).stdout);
+        const claimed = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
 
         expect(port).toBe(claimed.PORT_WEB);
         expect(await answers(port)).toBe(true);
@@ -94,7 +86,7 @@ describe("leeway exec", () => {
     it("--defaults puts each default port in place of {{NAME}} and in the env, keeping stdout for the command", () => {
         const { dir, home } = temporaryProject();
 
-        const result = runLeeway(["exec", "--defaults", "--", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home);
+        const result = LeewayCli.run(["exec", "--defaults", "--", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home);
 
         expect(result.stdout).toBe("argument 5173, env 5173 3001\n");
         expect(result.stderr).toContain("PORT_API  3001");
@@ -104,40 +96,18 @@ describe("leeway exec", () => {
     it("without a flag takes the ports from the environment", () => {
         const { dir, home } = temporaryProject();
 
-        const result = runLeeway(["exec", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, { PORT_WEB: "24000" });
+        const result = LeewayCli.run(["exec", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, { PORT_WEB: "24000" });
 
         expect(result.stdout).toBe("argument 24000, env 24000 3001\n");
     });
 });
-
-function temporaryProject(): { dir: string; home: string } {
-    const dir = temporaryDir("leeway-project-");
-    const home = temporaryDir("leeway-home-");
-
-    fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify(CATALOGUE));
-    Object.entries(FIXTURES).forEach(([name, source]) => fs.writeFileSync(path.join(dir, name), source));
-
-    return { dir, home };
-}
-
-function temporaryDir(prefix: string): string {
-    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
-
-    temporaryDirs.push(dir);
-
-    return dir;
-}
-
-function runLeeway(args: string[], cwd: string, home: string, extraEnv: Record<string, string> = {}) {
-    return spawnSync(process.execPath, [CLI, ...args], { cwd, env: leewayEnv(home, extraEnv), encoding: "utf8" });
-}
 
 describe("leeway errors", () => {
     it("prints the usage and fails on an unknown command or an exec without a command", () => {
         const { dir, home } = temporaryProject();
 
         [["start"], ["exec", "--claim"], ["env"]].forEach(args => {
-            const result = runLeeway(args, dir, home);
+            const result = LeewayCli.run(args, dir, home);
 
             expect(result.status).toBe(1);
             expect(result.stderr).toMatch(/^usage: leeway exec/);
@@ -147,16 +117,16 @@ describe("leeway errors", () => {
     it("refuses default ports to an agent shell and points at --claim", () => {
         const { dir, home } = temporaryProject();
 
-        const result = runLeeway(["exec", "--", "node", "-e", "process.exit(0)"], dir, home, { CLAUDECODE: "1" });
+        const result = LeewayCli.run(["exec", "--", "node", "-e", "process.exit(0)"], dir, home, { CLAUDECODE: "1" });
 
         expect(result.status).toBe(1);
         expect(result.stderr).toMatch(/^leeway: agent shell detected.*leeway exec --claim/);
     });
 
     it("fails with a leeway: message outside a folder with leeway.json", () => {
-        const home = temporaryDir("leeway-home-");
+        const home = LeewayCli.temporaryDir("leeway-home-");
 
-        const result = runLeeway(["env", "--export"], home, home);
+        const result = LeewayCli.run(["env", "--export"], home, home);
 
         expect(result.status).toBe(1);
         expect(result.stdout).toBe("");
@@ -180,8 +150,16 @@ describe.skipIf(process.platform === "win32")("leeway exec on a signal", () => {
     });
 });
 
+function temporaryProject(): { dir: string; home: string } {
+    const project = LeewayCli.project();
+
+    Object.entries(FIXTURES).forEach(([name, source]) => fs.writeFileSync(path.join(project.dir, name), source));
+
+    return project;
+}
+
 function startLeeway(args: string[], cwd: string, home: string): ChildProcess {
-    const leeway = spawn(process.execPath, [CLI, ...args], { cwd, env: leewayEnv(home, {}), stdio: ["ignore", "pipe", "pipe"] });
+    const leeway = LeewayCli.start(args, cwd, home);
 
     runningLeeways.push(leeway);
 
@@ -238,22 +216,4 @@ async function stopsAnswering(port: number): Promise<boolean> {
     }
 
     return false;
-}
-
-function leewayEnv(home: string, extraEnv: Record<string, string>): NodeJS.ProcessEnv {
-    const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, USERPROFILE: home, ...extraEnv };
-
-    INHERITED_TO_STRIP.filter(name => !(name in extraEnv)).forEach(name => delete env[name]);
-
-    return env;
-}
-
-function exportedPorts(stdout: string): Record<string, number> {
-    return Object.fromEntries(
-        stdout
-            .trim()
-            .split("\n")
-            .map(line => line.replace("export ", "").split("="))
-            .map(([name, port]) => [name, Number(port)]),
-    );
 }

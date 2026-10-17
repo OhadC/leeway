@@ -57,6 +57,13 @@ describe("leeway vite plugin", () => {
         expect(config.define).toBeUndefined();
     });
 
+    it("resolves no ports for a build, so the agent guard never blocks one", () => {
+        vi.stubEnv("CLAUDECODE", "1");
+        vi.stubEnv("VITEST", "");
+
+        expect(configOf(leeway({ catalogue, port: "PORT_WEB" }), {}, build)).toEqual({});
+    });
+
     it("injects the ports into a build when always asked to", () => {
         const config = configOf(leeway({ catalogue, port: "PORT_WEB", alwaysInject: true }), {}, build);
 

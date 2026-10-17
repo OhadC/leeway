@@ -65,6 +65,15 @@ describe("CatalogueFile.find", () => {
         );
     });
 
+    it.each(["web-port", "1PORT", "PORT WEB", ""])("rejects %j, which is not an environment variable name", name => {
+        const root = tempFolder();
+        writeCatalogue(root, { [name]: { port: 3000 } });
+
+        expect(() => CatalogueFile.find(root)).toThrowError(
+            `leeway: ${JSON.stringify(name)} in ${path.join(root, "leeway.json")} is not an environment variable name (letters, digits, _; not starting with a digit)`,
+        );
+    });
+
     it("accepts the port range edges", () => {
         const root = tempFolder();
         writeCatalogue(root, { LOW: { port: 1 }, HIGH: { port: 65535 } });

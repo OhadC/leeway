@@ -18,6 +18,10 @@ export class ExecCommand {
         const rest = flagMode ? args.slice(1) : args;
         const command = rest[0] === "--" ? rest.slice(1) : rest;
 
+        if (flagMode && MODE_FLAGS.has(rest[0])) {
+            return undefined;
+        }
+
         return command.length > 0 ? { mode: flagMode ?? "auto", command } : undefined;
     }
 

@@ -23,6 +23,11 @@ describe("ExecCommand.requestOf", () => {
         expect(ExecCommand.requestOf(["--claim", "--", "--claim"])).toEqual({ mode: "claim", command: ["--claim"] });
     });
 
+    it("has no request when both modes are given", () => {
+        expect(ExecCommand.requestOf(["--claim", "--defaults", "--", "vite"])).toBeUndefined();
+        expect(ExecCommand.requestOf(["--defaults", "--claim", "vite"])).toBeUndefined();
+    });
+
     it("has no request when the command is missing", () => {
         expect(ExecCommand.requestOf([])).toBeUndefined();
         expect(ExecCommand.requestOf(["--claim"])).toBeUndefined();

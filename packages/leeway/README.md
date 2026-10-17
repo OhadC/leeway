@@ -25,7 +25,7 @@ Requires Node >= 22.18. `leeway/vite` needs vite >= 7.
 
 ## The catalogue: `leeway.json`
 
-One `leeway.json` at the repo root lists every port your dev setup uses. The key is the environment variable, `port` is its default
+One `leeway.json` at the repo root lists every port your dev setup uses. The key is the environment variable (letters, digits and `_`, not starting with a digit), `port` is its default
 port. Any other properties are yours; leeway ignores them.
 
 ```json
@@ -202,12 +202,15 @@ This is why `leeway env --export` prints nothing but plain `export NAME=port` li
 - A hard kill of `leeway exec` itself (SIGKILL, Task Manager, `taskkill /F` on leeway alone) skips its cleanup and can orphan the command
   tree. Recover with `leeway kill` in that folder.
 - On Windows, a command that exits while leaving background grandchildren behind can orphan them too; `leeway kill` again.
+- On Linux and macOS the command runs in its own session (that is how it gets its own process group), so it has no controlling terminal:
+  it still reads keys from stdin, but tools that open `/dev/tty` directly (some password prompts, full-screen TUIs) fail.
 - A port can be taken between the claim and your server binding it. `strictPort` and bind errors make that a loud failure, not a silent
   drift.
 - The pool is never compacted, so it can fragment. A full pool fails with a message; remove unused folders' ranges from
   `~/.leeway/ranges.json`.
 - The pool is not configurable, and there is no `leeway init`: write `leeway.json` by hand.
-- `leeway list` and `leeway kill` scan listeners with PowerShell on Windows, `ss` on Linux and `lsof` on macOS.
+- `leeway list` and `leeway kill` scan listeners with PowerShell on Windows, `ss` on Linux and `lsof` on macOS. Without root on Linux and macOS they see
+  only your own processes.
 
 ## License
 

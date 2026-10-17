@@ -11,8 +11,6 @@ export type RangeEntry = {
     ports: Record<string, number>;
 };
 
-export type RangeEntries = RangeEntry[];
-
 export type PortBindState = "free" | "in-use" | "unavailable";
 
 export type ClaimRangeOptions = {
@@ -43,9 +41,9 @@ type RegistryFile = {
 };
 
 export class RangeRegistry {
-    static readonly VERSION = 1;
     static readonly POOL_START = 21000;
     static readonly POOL_END = 29999;
+    private static readonly VERSION = 1;
 
     static defaultPath(home: string): string {
         return path.join(home, ".leeway", "ranges.json");
@@ -78,19 +76,19 @@ export class RangeRegistry {
     static livingEntries(
         registryPath = RangeRegistry.defaultPath(os.homedir()),
         pathExists: (candidate: string) => boolean = fs.existsSync,
-    ): RangeEntries {
+    ): RangeEntry[] {
         return Object.entries(RangeRegistry.read(registryPath).folders)
             .filter((pair): pair is [string, StoredRange] => RangeRegistry.isStoredRange(pair[1]) && pathExists(pair[0]))
             .map(([folder, range]) => ({ folder, ...range }));
     }
 
-    static entryOfFolder(entries: RangeEntries, folder: string, platform: NodeJS.Platform): RangeEntry | undefined {
+    static entryOfFolder(entries: RangeEntry[], folder: string, platform: NodeJS.Platform): RangeEntry | undefined {
         const key = RangeRegistry.folderKey(folder, platform);
 
         return entries.find(entry => RangeRegistry.folderKey(entry.folder, platform) === key);
     }
 
-    static entryOfPort(entries: RangeEntries, port: number): RangeEntry | undefined {
+    static entryOfPort(entries: RangeEntry[], port: number): RangeEntry | undefined {
         return entries.find(entry => port >= entry.start && port <= entry.end);
     }
 
@@ -102,7 +100,7 @@ export class RangeRegistry {
         return port >= RangeRegistry.POOL_START && port <= RangeRegistry.POOL_END;
     }
 
-    static folderKey(folder: string, platform: NodeJS.Platform): string {
+    private static folderKey(folder: string, platform: NodeJS.Platform): string {
         return platform === "win32" ? path.win32.resolve(folder).toLowerCase() : path.posix.resolve(folder);
     }
 

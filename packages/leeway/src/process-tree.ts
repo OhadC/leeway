@@ -1,8 +1,12 @@
 import { spawnSync } from "node:child_process";
 
 export class ProcessTree {
-    static taskkill(pid: number): void {
-        spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
+    static killTreeQuietly(pid: number): void {
+        try {
+            ProcessTree.killTree(pid);
+        } catch {
+            return;
+        }
     }
 
     static killTree(pid: number, platform: NodeJS.Platform = process.platform): void {

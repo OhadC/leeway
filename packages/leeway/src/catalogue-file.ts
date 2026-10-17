@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { LeewayCatalogue } from "./dev-ports.ts";
 
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 export type FoundCatalogue = {
     root: string;
     catalogue: LeewayCatalogue;
@@ -20,7 +22,7 @@ export class CatalogueFile {
         return { root, catalogue: CatalogueFile.read(path.join(root, CatalogueFile.NAME)) };
     }
 
-    static rootOf(from: string): string | undefined {
+    private static rootOf(from: string): string | undefined {
         let current = path.resolve(from);
 
         while (!fs.existsSync(path.join(current, CatalogueFile.NAME))) {
@@ -42,6 +44,12 @@ export class CatalogueFile {
         }
 
         for (const [name, entry] of Object.entries(content)) {
+            if (!ENV_NAME.test(name)) {
+                throw new Error(
+                    `leeway: ${JSON.stringify(name)} in ${file} is not an environment variable name (letters, digits, _; not starting with a digit)`,
+                );
+            }
+
             if (!isPort((entry as { port?: unknown } | null)?.port)) {
                 throw new Error(`leeway: ${name} in ${file} needs a "port" that is an integer 1-65535`);
             }

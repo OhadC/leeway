@@ -16,12 +16,25 @@ describe("RangeListing.collect", () => {
                 start: 21000,
                 end: 21001,
                 ports: [
-                    { name: "web", port: 21000, pid: undefined },
-                    { name: "server", port: 21001, pid: 40 },
+                    { name: "web", port: 21000, pids: [] },
+                    { name: "server", port: 21001, pids: [40] },
                 ],
             },
-            { folder: "C:\\dev\\tool", start: 21002, end: 21002, ports: [{ name: "docs", port: 21002, pid: undefined }] },
+            { folder: "C:\\dev\\tool", start: 21002, end: 21002, ports: [{ name: "docs", port: 21002, pids: [] }] },
         ]);
+    });
+
+    it("lists every pid listening on a port", () => {
+        const listing = RangeListing.collect(
+            [TOOL],
+            [
+                { port: 21002, pid: 60 },
+                { port: 21002, pid: 61 },
+            ],
+        );
+
+        expect(listing.ranges[0]?.ports).toEqual([{ name: "docs", port: 21002, pids: [60, 61] }]);
+        expect(RangeListing.render(listing)).toContain("  docs  21002  pid 60, 61\n");
     });
 
     it("reports pool listeners outside every range as orphans and ignores listeners outside the pool", () => {

@@ -26,14 +26,14 @@ export class RunWithPorts {
         }
 
         if (isWindows) {
-            WINDOWS_STOP_SIGNALS.forEach(signal => process.on(signal, () => ProcessTree.taskkill(pid)));
+            WINDOWS_STOP_SIGNALS.forEach(signal => process.on(signal, () => ProcessTree.killTreeQuietly(pid)));
         } else {
             POSIX_FORWARDED_SIGNALS.forEach(signal => process.on(signal, () => ProcessTree.signalGroup(pid, signal)));
         }
 
         child.on("exit", (code, signal) => {
             if (isWindows) {
-                ProcessTree.taskkill(pid);
+                ProcessTree.killTreeQuietly(pid);
             }
 
             process.exit(signal ? 1 : (code ?? 1));

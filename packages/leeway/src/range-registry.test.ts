@@ -11,73 +11,6 @@ afterEach(() => {
     cleanups.splice(0).forEach(cleanup => cleanup());
 });
 
-function createHome(): string {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), "leeway-ranges-"));
-    cleanups.push(() => fs.rmSync(home, { recursive: true, force: true }));
-
-    return home;
-}
-
-function createRegistryPath(contents?: unknown): string {
-    const registryPath = RangeRegistry.defaultPath(createHome());
-
-    if (contents !== undefined) {
-        fs.mkdirSync(path.dirname(registryPath), { recursive: true });
-        fs.writeFileSync(registryPath, JSON.stringify(contents));
-    }
-
-    return registryPath;
-}
-
-function readRegistry(registryPath: string): { version: number; folders: Record<string, unknown> } {
-    return JSON.parse(fs.readFileSync(registryPath, "utf8"));
-}
-
-function claim(registryPath: string, folder: string, names: string[], overrides: Partial<ClaimRangeOptions> = {}) {
-    return RangeRegistry.claim({
-        registryPath,
-        folder,
-        names,
-        platform: "linux",
-        pathExists: () => true,
-        testPort: portStates({}),
-        now: Date.now,
-        ...overrides,
-    });
-}
-
-function heldClaim(registryPath: string, folder: string, overrides: Partial<ClaimRangeOptions> = {}) {
-    let markLocked!: () => void;
-    let finish!: () => void;
-    const locked = new Promise<void>(resolve => (markLocked = resolve));
-    const finished = new Promise<void>(resolve => (finish = resolve));
-    const testPort = async () => {
-        markLocked();
-        await finished;
-
-        return "free" as const;
-    };
-
-    return { locked, finish, claimed: claim(registryPath, folder, ["PORT_A"], { testPort, ...overrides }) };
-}
-
-function settledFlag<T>(promise: Promise<T>) {
-    let settled = false;
-    const claimed = promise.finally(() => {
-        settled = true;
-    });
-
-    return { claimed, settled: () => settled };
-}
-
-function pause(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function portStates(states: Record<number, PortBindState>): ClaimRangeOptions["testPort"] {
-    return async port => states[port] ?? "free";
-}
-
 describe("RangeRegistry.claim", () => {
     it("gives the first folder a range at the start of the pool, one port per name", async () => {
         const home = createHome();
@@ -99,7 +32,7 @@ describe("RangeRegistry.claim", () => {
 
         const again = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"]);
 
-        expect(again).toEqual({ folder: "/repo", start: 21001, end: 21002, ports: { PORT_A: 21001, PORT_B: 21002 } });
+        expect(first).toEqual({ folder: "/repo", start: 21001, end: 21002, ports: { PORT_A: 21001, PORT_B: 21002 } });
         expect(again).toEqual(first);
         expect(Object.keys(readRegistry(registryPath).folders)).toEqual(["/other", "/repo"]);
     });
@@ -419,3 +352,70 @@ describe("RangeRegistry lookups", () => {
         expect([20999, 21000, 29999, 30000].map(port => RangeRegistry.isInPool(port))).toEqual([false, true, true, false]);
     });
 });
+
+function createHome(): string {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "leeway-ranges-"));
+    cleanups.push(() => fs.rmSync(home, { recursive: true, force: true }));
+
+    return home;
+}
+
+function createRegistryPath(contents?: unknown): string {
+    const registryPath = RangeRegistry.defaultPath(createHome());
+
+    if (contents !== undefined) {
+        fs.mkdirSync(path.dirname(registryPath), { recursive: true });
+        fs.writeFileSync(registryPath, JSON.stringify(contents));
+    }
+
+    return registryPath;
+}
+
+function readRegistry(registryPath: string): { version: number; folders: Record<string, unknown> } {
+    return JSON.parse(fs.readFileSync(registryPath, "utf8"));
+}
+
+function claim(registryPath: string, folder: string, names: string[], overrides: Partial<ClaimRangeOptions> = {}) {
+    return RangeRegistry.claim({
+        registryPath,
+        folder,
+        names,
+        platform: "linux",
+        pathExists: () => true,
+        testPort: portStates({}),
+        now: Date.now,
+        ...overrides,
+    });
+}
+
+function heldClaim(registryPath: string, folder: string, overrides: Partial<ClaimRangeOptions> = {}) {
+    let markLocked!: () => void;
+    let finish!: () => void;
+    const locked = new Promise<void>(resolve => (markLocked = resolve));
+    const finished = new Promise<void>(resolve => (finish = resolve));
+    const testPort = async () => {
+        markLocked();
+        await finished;
+
+        return "free" as const;
+    };
+
+    return { locked, finish, claimed: claim(registryPath, folder, ["PORT_A"], { testPort, ...overrides }) };
+}
+
+function settledFlag<T>(promise: Promise<T>) {
+    let settled = false;
+    const claimed = promise.finally(() => {
+        settled = true;
+    });
+
+    return { claimed, settled: () => settled };
+}
+
+function pause(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function portStates(states: Record<number, PortBindState>): ClaimRangeOptions["testPort"] {
+    return async port => states[port] ?? "free";
+}

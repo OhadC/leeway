@@ -13,6 +13,10 @@ export function leeway<T extends LeewayCatalogue = LeewayCatalogue>(options: Lee
     return {
         name: "leeway",
         config(userConfig, { command }) {
+            if (command === "build" && !options.alwaysInject) {
+                return {};
+            }
+
             const catalogue = options.catalogue ?? CatalogueFile.find(userConfig.root ?? process.cwd()).catalogue;
             const ports: Record<string, number> = devPorts(catalogue);
             const config: UserConfig = { server: { port: portNamed(ports, options.port), strictPort: true } };
