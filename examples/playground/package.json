@@ -3,13 +3,11 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "leeway vite",
-        "api": "leeway node server.ts",
-        "dev:default": "leeway --default vite",
-        "both": "leeway pnpm run \"/^serve:/\"",
-        "both:default": "leeway --default pnpm run \"/^serve:/\"",
+        "dev": "leeway pnpm run \"/^serve:/\"",
+        "dev:default": "leeway --default pnpm run \"/^serve:/\"",
         "serve:web": "leeway --inherit vite",
         "serve:api": "leeway --inherit node server.ts",
+        "hello": "leeway curl -s http://localhost:{{PORT_API}}",
         "typecheck": "tsc -p tsconfig.json"
     },
     "dependencies": {
