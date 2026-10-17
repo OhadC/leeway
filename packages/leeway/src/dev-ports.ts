@@ -10,9 +10,7 @@ const AGENT_MARKERS = ["CLAUDECODE", "GEMINI_CLI", "CURSOR_AGENT", "AI_AGENT"];
 
 export function devPorts<T extends LeewayCatalogue>(catalogue: T, env: LeewayEnv = currentEnv()): PortsOf<T> {
     if (isAgentShell(env) && !env.VITEST && !Object.keys(catalogue).some(name => env[name])) {
-        throw new Error(
-            "leeway: agent shell detected without leeway ports; run through `leeway exec --claim -- <command>` or `leeway env --export`",
-        );
+        throw new Error("leeway: agent shell detected without leeway ports; run through `leeway <command>` or `leeway env --export`");
     }
 
     return Object.fromEntries(Object.entries(catalogue).map(([name, { port }]) => [name, configuredPort(env[name]) ?? port])) as PortsOf<T>;

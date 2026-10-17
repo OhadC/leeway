@@ -3,9 +3,9 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "leeway exec --claim -- vite",
-        "api": "leeway exec --claim -- node server.ts",
-        "dev:defaults": "leeway exec --defaults -- vite",
+        "dev": "leeway vite",
+        "api": "leeway node server.ts",
+        "dev:defaults": "leeway --defaults vite",
         "typecheck": "tsc -p tsconfig.json"
     },
     "dependencies": {

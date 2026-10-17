@@ -1,28 +1,19 @@
-export type ExecMode = "auto" | "claim" | "defaults";
+export type ExecMode = "claim" | "defaults";
 
 export type ExecRequest = {
     mode: ExecMode;
     command: readonly string[];
 };
 
-const MODE_FLAGS = new Map<string | undefined, ExecMode>([
-    ["--claim", "claim"],
-    ["--defaults", "defaults"],
-]);
-
 const SAFE_ARGUMENT = /^[\w\-+=.,/:@%{}]+$/;
 
 export class ExecCommand {
     static requestOf(args: readonly string[]): ExecRequest | undefined {
-        const flagMode = MODE_FLAGS.get(args[0]);
-        const rest = flagMode ? args.slice(1) : args;
+        const mode = args[0] === "--defaults" ? "defaults" : "claim";
+        const rest = mode === "defaults" ? args.slice(1) : args;
         const command = rest[0] === "--" ? rest.slice(1) : rest;
 
-        if (flagMode && MODE_FLAGS.has(rest[0])) {
-            return undefined;
-        }
-
-        return command.length > 0 ? { mode: flagMode ?? "auto", command } : undefined;
+        return command.length > 0 ? { mode, command } : undefined;
     }
 
     static commandLine(command: readonly string[], ports: Record<string, number>, platform: NodeJS.Platform = process.platform): string {

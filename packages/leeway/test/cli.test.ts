@@ -73,17 +73,17 @@ describe("leeway env --export", () => {
     });
 });
 
-describe("leeway exec", () => {
+describe("leeway <command>", () => {
     it("exits with the command's exit code", () => {
         const { dir, home } = temporaryProject();
 
-        expect(LeewayCli.run(["exec", "--", "node", "-e", "process.exit(7)"], dir, home).status).toBe(7);
-        expect(LeewayCli.run(["exec", "--claim", "--", "node", "-e", "process.exit(0)"], dir, home).status).toBe(0);
+        expect(LeewayCli.run(["--", "node", "-e", "process.exit(7)"], dir, home).status).toBe(7);
+        expect(LeewayCli.run(["node", "-e", "process.exit(0)"], dir, home).status).toBe(0);
     });
 
-    it("--claim gives the command the claimed ports, and its server answers on one", async () => {
+    it("gives the command the claimed ports, and its server answers on one", async () => {
         const { dir, home } = temporaryProject();
-        const leeway = startLeeway(["exec", "--claim", "--", "node", "-e", SERVER], dir, home);
+        const leeway = startLeeway(["node", "-e", SERVER], dir, home);
 
         const port = await listeningPort(leeway);
         const claimed = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
@@ -95,7 +95,7 @@ describe("leeway exec", () => {
     it("--defaults puts each default port in place of {{NAME}} and in the env, ignoring the environment and the agent guard", () => {
         const { dir, home } = temporaryProject();
 
-        const result = LeewayCli.run(["exec", "--defaults", "--", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, {
+        const result = LeewayCli.run(["--defaults", "--", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, {
             PORT_WEB: "24000",
             CLAUDECODE: "1",
         });
@@ -105,34 +105,26 @@ describe("leeway exec", () => {
         expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
     });
 
-    it("without a flag takes the ports from the environment", () => {
+    it("claims the folder's range over ports already in the environment, and in an agent shell", () => {
         const { dir, home } = temporaryProject();
+        const claimed = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
+        const expected = `argument ${claimed.PORT_WEB}, env ${claimed.PORT_WEB} ${claimed.PORT_API}\n`;
 
-        const result = LeewayCli.run(["exec", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, { PORT_WEB: "24000" });
-
-        expect(result.stdout).toBe("argument 24000, env 24000 3001\n");
+        expect(LeewayCli.run(["node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, { PORT_WEB: "24000" }).stdout).toBe(expected);
+        expect(LeewayCli.run(["node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, { CLAUDECODE: "1" }).stdout).toBe(expected);
     });
 });
 
 describe("leeway errors", () => {
-    it("prints the usage and fails on an unknown command or an exec without a command", () => {
+    it("prints the usage and fails on a missing command or a misused subcommand", () => {
         const { dir, home } = temporaryProject();
 
-        [["start"], ["exec", "--claim"], ["env"]].forEach(args => {
+        [[], ["--defaults"], ["env"], ["list", "all"], ["kill", "web"]].forEach(args => {
             const result = LeewayCli.run(args, dir, home);
 
             expect(result.status).toBe(1);
-            expect(result.stderr).toMatch(/^usage: leeway exec/);
+            expect(result.stderr).toMatch(/^usage: leeway \[--defaults\]/);
         });
-    });
-
-    it("refuses default ports to an agent shell and points at --claim", () => {
-        const { dir, home } = temporaryProject();
-
-        const result = LeewayCli.run(["exec", "--", "node", "-e", "process.exit(0)"], dir, home, { CLAUDECODE: "1" });
-
-        expect(result.status).toBe(1);
-        expect(result.stderr).toMatch(/^leeway: agent shell detected.*leeway exec --claim/);
     });
 
     it("fails with a leeway: message outside a folder with leeway.json", () => {
@@ -146,10 +138,10 @@ describe("leeway errors", () => {
     });
 });
 
-describe.skipIf(process.platform === "win32")("leeway exec on a signal", () => {
+describe.skipIf(process.platform === "win32")("leeway <command> on a signal", () => {
     it.each(["SIGINT", "SIGTERM", "SIGHUP"] as const)("%s stops the whole command tree, so nothing is left listening", async signal => {
         const { dir, home } = temporaryProject();
-        const leeway = startLeeway(["exec", "--claim", "--", "node", "launcher.mjs"], dir, home);
+        const leeway = startLeeway(["node", "launcher.mjs"], dir, home);
         const port = await listeningPort(leeway);
         const exitCode = new Promise(resolve => leeway.once("exit", resolve));
 
@@ -162,11 +154,11 @@ describe.skipIf(process.platform === "win32")("leeway exec on a signal", () => {
     });
 });
 
-describe.runIf(process.platform === "win32")("leeway exec on Ctrl+C in its console", () => {
+describe.runIf(process.platform === "win32")("leeway <command> on Ctrl+C in its console", () => {
     it("stops the whole command tree, even a server that ignores Ctrl+C, so nothing is left listening", async () => {
         const { dir, home } = temporaryProject();
         const port = Number(LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout).PORT_WEB);
-        const pid = LeewayCli.startInOwnConsole(["exec", "--claim", "--", "node", "ctrl-c-ignoring-server.mjs"], dir, home);
+        const pid = LeewayCli.startInOwnConsole(["node", "ctrl-c-ignoring-server.mjs"], dir, home);
 
         ownConsoleLeeways.push({ pid, dir });
 

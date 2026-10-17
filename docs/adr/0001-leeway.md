@@ -58,13 +58,14 @@ claim's lock. The registry is written atomically (temp file, rename).
 erases another's claims. A registry with a newer `version` refuses claims ("update leeway"); one that isn't a registry refuses claims rather
 than being overwritten.
 
-**Default ports are each repo's own business.** `leeway exec --defaults` runs on the catalogue's ports without touching the registry; they
-may collide across repos. Plain `leeway exec` uses the environment, else default ports, so one script works both in a shell that already has
-its range and in a developer's shell that wants the usual ports. `--claim` claims the range. `{{NAME}}` in the command becomes the port, for
-tools that take a port only as an argument.
+**Claiming is the default.** `leeway <command>` claims the folder's range and runs the command on it, ignoring ports already in the
+environment: a claim is cheap and repeatable, and an inherited environment can belong to another folder. `leeway --defaults <command>` runs
+on the catalogue's default ports without touching the registry; default ports are each repo's own business and may collide across repos.
+`env`, `list` and `kill` are reserved; `--` runs a command of that name. `{{NAME}}` in the command becomes the port, for tools that take a
+port only as an argument.
 
 **Environment variables are the transport.** They pass through `concurrently`, `tsx`, package scripts and shells to every child process
-with no integration. `leeway exec` runs the command through the system shell: one argument is a shell line, several are an argv quoted for
+with no integration. `leeway` runs the command through the system shell: one argument is a shell line, several are an argv quoted for
 the shell. Stopping leeway stops the tree: on POSIX the command gets its own process group and SIGINT, SIGTERM and SIGHUP are forwarded to
 it; on Windows, which has no process groups to signal, Ctrl+C, Ctrl+Break and console close run `taskkill /T /F`.
 
@@ -78,7 +79,7 @@ time. Claude Code gets its range up front: a SessionStart hook appends `leeway e
 every Bash command. Claude Code's PowerShell tool honours that file only when every line is a plain export, so `leeway env --export` writes only `export NAME=port` lines to stdout and everything else to
 stderr. The earlier `dev-ports` rewrote every `pnpm <script>` in a PreToolUse hook; exporting the range once per session covers every command,
 not just package scripts. Other agents are
-told to run `leeway exec --claim -- <command>`. Codex has no reliable marker, and Copilot and Aider document none, so for them the guard
+told to run `leeway <command>`. Codex has no reliable marker, and Copilot and Aider document none, so for them the guard
 can't fire.
 
 **Listing and killing scan the OS.** `leeway list` shows every range from every repo with the pid on each port, plus orphans: pool listeners
@@ -98,6 +99,6 @@ just the listeners on it; it never kills outside the pool. The scan uses PowerSh
 - A freed range whose orphaned servers still listen, or a port held by an unrelated process or reserved by the OS, is skipped at claim time.
 - A port can still be taken between the claim and the server binding it; `strictPort` and bind errors make that loud.
 - The pool is never compacted and can fragment; a full pool fails with a message to remove unused folders' ranges.
-- A hard kill of `leeway exec` itself skips its cleanup and can leave the command tree running on any OS; `leeway kill` recovers it.
+- A hard kill of `leeway` itself skips its cleanup and can leave the command tree running on any OS; `leeway kill` recovers it.
 - Anything spawned with a scrubbed environment loses its ports, and in an agent shell hits the guard.
 - Reading a vite config no longer shows the port.

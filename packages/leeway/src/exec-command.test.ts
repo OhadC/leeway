@@ -2,35 +2,29 @@ import { describe, expect, it } from "vitest";
 import { ExecCommand } from "./exec-command.ts";
 
 describe("ExecCommand.requestOf", () => {
-    it("reads --claim as the mode and the rest after -- as the command", () => {
-        expect(ExecCommand.requestOf(["--claim", "--", "vite", "--port", "{{PORT_WEB}}"])).toEqual({
+    it("claims without a flag, with or without --", () => {
+        expect(ExecCommand.requestOf(["vite", "--port", "{{PORT_WEB}}"])).toEqual({
             mode: "claim",
             command: ["vite", "--port", "{{PORT_WEB}}"],
         });
+        expect(ExecCommand.requestOf(["--", "vite"])).toEqual({ mode: "claim", command: ["vite"] });
     });
 
-    it("reads --defaults as the mode", () => {
+    it("reads --defaults as the mode, with or without --", () => {
         expect(ExecCommand.requestOf(["--defaults", "vite"])).toEqual({ mode: "defaults", command: ["vite"] });
+        expect(ExecCommand.requestOf(["--defaults", "--", "vite"])).toEqual({ mode: "defaults", command: ["vite"] });
     });
 
-    it("falls back to the auto mode without a flag, with or without --", () => {
-        expect(ExecCommand.requestOf(["vite"])).toEqual({ mode: "auto", command: ["vite"] });
-        expect(ExecCommand.requestOf(["--", "vite"])).toEqual({ mode: "auto", command: ["vite"] });
-    });
-
-    it("leaves flags it does not know to the command", () => {
-        expect(ExecCommand.requestOf(["--watch", "vite"])).toEqual({ mode: "auto", command: ["--watch", "vite"] });
-        expect(ExecCommand.requestOf(["--claim", "--", "--claim"])).toEqual({ mode: "claim", command: ["--claim"] });
-    });
-
-    it("has no request when both modes are given", () => {
-        expect(ExecCommand.requestOf(["--claim", "--defaults", "--", "vite"])).toBeUndefined();
-        expect(ExecCommand.requestOf(["--defaults", "--claim", "vite"])).toBeUndefined();
+    it("leaves flags it does not know, and anything after --, to the command", () => {
+        expect(ExecCommand.requestOf(["--watch", "vite"])).toEqual({ mode: "claim", command: ["--watch", "vite"] });
+        expect(ExecCommand.requestOf(["--", "--defaults"])).toEqual({ mode: "claim", command: ["--defaults"] });
+        expect(ExecCommand.requestOf(["--defaults", "--", "--defaults"])).toEqual({ mode: "defaults", command: ["--defaults"] });
     });
 
     it("has no request when the command is missing", () => {
         expect(ExecCommand.requestOf([])).toBeUndefined();
-        expect(ExecCommand.requestOf(["--claim"])).toBeUndefined();
+        expect(ExecCommand.requestOf(["--"])).toBeUndefined();
+        expect(ExecCommand.requestOf(["--defaults"])).toBeUndefined();
         expect(ExecCommand.requestOf(["--defaults", "--"])).toBeUndefined();
     });
 });

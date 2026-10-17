@@ -7,7 +7,7 @@ tests talk to the wrong server. leeway gives every folder its own stable, contig
 environment variables.
 
 ```sh
-$ leeway exec --claim -- vite
+$ leeway vite
 leeway: ports 21000-21001 for /home/me/app
   PORT_WEB  21000
   PORT_API  21001
@@ -80,7 +80,7 @@ there are none.
 **Agent guard.** In an agent shell (`CLAUDECODE`, `GEMINI_CLI`, `CURSOR_AGENT` or `AI_AGENT` set), `devPorts` throws if none of the
 catalogue's variables are set, so an agent can't silently start a server on your default ports. It is skipped under `VITEST`, because app
 modules often read ports at import time in tests. Codex sets no reliable marker, and Copilot and Aider document none, so for them the
-guard can't fire; tell them to use `leeway exec --claim` (see [Agents](#agents)).
+guard can't fire; tell them to start servers through `leeway` (see [Agents](#agents)).
 
 ## Vite: `leeway/vite`
 
@@ -109,31 +109,25 @@ The plugin:
 
 ## CLI
 
-### `leeway exec [--claim | --defaults] [--] <command>`
+### `leeway [--defaults] [--] <command>`
 
-Runs `<command>` with every catalogue port in its environment.
-
-| mode         | ports                                                                      |
-| ------------ | -------------------------------------------------------------------------- |
-| (no flag)    | `devPorts`: environment variables, else default ports; agent guard applies |
-| `--claim`    | this folder's range, claimed in the registry                               |
-| `--defaults` | default ports, ignoring the environment and the agent guard                |
-
-`--claim` and `--defaults` print the port table on stderr.
+Claims this folder's range and runs `<command>` with every port in its environment, whatever ports the environment already has. With
+`--defaults` it runs on the default ports instead, without touching the registry. Either way the port table goes to stderr.
 
 ```json
 {
     "scripts": {
-        "dev": "leeway exec --claim -- vite",
-        "dev:defaults": "leeway exec --defaults -- vite",
-        "wait:api": "leeway exec -- wait-on tcp:{{PORT_API}}"
+        "dev": "leeway vite",
+        "dev:defaults": "leeway --defaults vite",
+        "wait:api": "leeway wait-on tcp:{{PORT_API}}"
     }
 }
 ```
 
 - `{{NAME}}` anywhere in the command becomes that port.
-- One argument is a shell line, run as-is: `leeway exec --claim "vite build && vite preview"`. Several arguments are an argv: each is quoted for the
-  shell when needed, so `leeway exec -- node -e "console.log(1)"` runs exactly that.
+- `env`, `list` and `kill` are leeway's own commands; to run a command with one of those names, put `--` first: `leeway -- kill ...`.
+- One argument is a shell line, run as-is: `leeway "vite build && vite preview"`. Several arguments are an argv: each is quoted for the
+  shell when needed, so `leeway node -e "console.log(1)"` runs exactly that.
 - The command runs through the system shell (`sh`, `cmd.exe` on Windows).
 - leeway exits with the command's exit code, or 1 if it died from a signal or could not start.
 - Stopping leeway stops the whole command tree. On Linux and macOS the command runs in its own process group and SIGINT, SIGTERM and SIGHUP
@@ -150,8 +144,8 @@ export PORT_API=21001
 ```
 
 stdout carries only `export NAME=port` lines; the port table and warnings go to stderr. If the range moved since the last claim, stderr
-says so: restart anything still on the old ports. Use it as `eval "$(leeway env --export)"` to give a shell its range, after which plain
-`leeway exec` and `devPorts` pick the ports up.
+says so: restart anything still on the old ports. Use it as `eval "$(leeway env --export)"` to give a shell its range, after which
+`devPorts` and tools started without `leeway` pick the ports up.
 
 ### `leeway list`
 
@@ -175,8 +169,7 @@ outside every range is an orphan: `leeway kill <port>` kills just the listeners 
 ## Agents
 
 **Claude Code**: give every session its range up front with a SessionStart hook in `.claude/settings.json`. Claude Code sources
-`$CLAUDE_ENV_FILE` before each Bash command, so every server the agent starts sees the ports, through `vite`, `devPorts` and plain
-`leeway exec` alike:
+`$CLAUDE_ENV_FILE` before each Bash command, so every server the agent starts sees the ports, even one started without `leeway`:
 
 ```json
 {
@@ -194,11 +187,11 @@ This is why `leeway env --export` prints nothing but plain `export NAME=port` li
 `$CLAUDE_ENV_FILE` only when every line is a plain export, and in Bash a table or a warning there would run as a command.
 
 **Other agents** (Codex, Gemini CLI, Cursor, Copilot, Aider, ...): tell them in `AGENTS.md` to start servers with
-`leeway exec --claim -- <command>`. Where the agent sets a marker, the agent guard catches the times it forgets.
+`leeway <command>`. Where the agent sets a marker, the agent guard catches the times it forgets.
 
 ## Limits
 
-- A hard kill of `leeway exec` itself (SIGKILL, Task Manager, `taskkill /F` on leeway alone) skips its cleanup and can leave the command
+- A hard kill of `leeway` itself (SIGKILL, Task Manager, `taskkill /F` on leeway alone) skips its cleanup and can leave the command
   tree running. Recover with `leeway kill` in that folder.
 - On Windows, a command that exits while leaving background grandchildren behind can leave them running too; `leeway kill` again.
 - On Linux and macOS the command runs in its own session (that is how it gets its own process group), so it has no controlling terminal:

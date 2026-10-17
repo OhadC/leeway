@@ -11,25 +11,27 @@ import { RangeRegistry } from "./range-registry.ts";
 import { RunWithPorts } from "./run-with-ports.ts";
 
 const USAGE = [
-    "usage: leeway exec [--claim | --defaults] [--] <command>   run <command> with the ports as env vars; {{NAME}} in <command> becomes its port",
-    "       leeway env --export                                 claim this folder's range and print it as export lines",
-    "       leeway list                                         show every range, the pids listening in it, and orphan listeners in the pool",
-    "       leeway kill [<port>]                                kill what listens in this folder's range, or in the range holding <port>, or on an orphan <port>",
+    "usage: leeway [--defaults] [--] <command>   run <command> with this folder's range, or the default ports, as env vars; {{NAME}} in <command> becomes its port",
+    "       leeway env --export                  claim this folder's range and print it as export lines",
+    "       leeway list                          show every range, the pids listening in it, and orphan listeners in the pool",
+    "       leeway kill [<port>]                 kill what listens in this folder's range, or in the range holding <port>, or on an orphan <port>",
 ].join("\n");
 
-async function runLeeway(): Promise<void> {
-    const [command, ...args] = process.argv.slice(2);
+const SUBCOMMANDS = new Set(["env", "list", "kill"]);
 
-    const request = command === "exec" ? ExecCommand.requestOf(args) : undefined;
+async function runLeeway(): Promise<void> {
+    const args = process.argv.slice(2);
+    const [subcommand, ...rest] = args;
+    const request = SUBCOMMANDS.has(subcommand ?? "") ? undefined : ExecCommand.requestOf(args);
 
     if (request) {
         await execWithPorts(CatalogueFile.find(process.cwd()), request);
-    } else if (command === "env" && args.length === 1 && args[0] === "--export") {
+    } else if (subcommand === "env" && rest.length === 1 && rest[0] === "--export") {
         await printExportLines(CatalogueFile.find(process.cwd()));
-    } else if (command === "list" && args.length === 0) {
+    } else if (subcommand === "list" && rest.length === 0) {
         process.stdout.write(RangeListing.render(RangeListing.collect(RangeRegistry.livingEntries(), ListenerScan.listeners())));
-    } else if (command === "kill" && args.length <= 1 && args.every(arg => /^\d+$/.test(arg))) {
-        killRange(args[0]);
+    } else if (subcommand === "kill" && rest.length <= 1 && rest.every(arg => /^\d+$/.test(arg))) {
+        killRange(rest[0]);
     } else {
         failWith(USAGE);
     }
@@ -42,10 +44,6 @@ async function execWithPorts(found: FoundCatalogue, { mode, command }: ExecReque
 }
 
 async function portsOfMode(found: FoundCatalogue, mode: ExecMode): Promise<Record<string, number>> {
-    if (mode === "auto") {
-        return devPorts(found.catalogue);
-    }
-
     if (mode === "defaults") {
         const ports = devPorts(found.catalogue, {});
 

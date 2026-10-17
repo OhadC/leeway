@@ -31,7 +31,7 @@ describe("devPorts", () => {
 });
 
 describe("devPorts agent guard", () => {
-    const agentShellError = /leeway exec --claim -- <command>.*leeway env --export/;
+    const agentShellError = /`leeway <command>`.*`leeway env --export`/;
 
     it.each(["CLAUDECODE", "GEMINI_CLI", "CURSOR_AGENT", "AI_AGENT"])(
         "refuses default ports to a %s shell that has no leeway ports",
