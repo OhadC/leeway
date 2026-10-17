@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import os from "node:os";
-import type { FoundCatalogue } from "./catalogue-file.ts";
+import type { FoundConfig } from "./config-file.ts";
 import { type RangeEntry, RangeRegistry } from "./range-registry.ts";
 
 export type FolderClaim = {
@@ -9,13 +9,13 @@ export type FolderClaim = {
 };
 
 export class FolderRange {
-    static async claim({ folder, catalogue }: FoundCatalogue): Promise<FolderClaim> {
+    static async claim({ folder, config }: FoundConfig): Promise<FolderClaim> {
         const registryPath = RangeRegistry.defaultPath(os.homedir());
         const previous = RangeRegistry.entryOfFolder(RangeRegistry.livingEntries(registryPath), folder, process.platform);
         const entry = await RangeRegistry.claim({
             registryPath,
             folder,
-            names: Object.keys(catalogue),
+            names: Object.keys(config.ports),
             platform: process.platform,
             pathExists: fs.existsSync,
             testPort: RangeRegistry.testPort,

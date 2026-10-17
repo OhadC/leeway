@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { CatalogueFile, type FoundCatalogue } from "./catalogue-file.ts";
+import { ConfigFile, type FoundConfig } from "./config-file.ts";
 import { devPorts } from "./dev-ports.ts";
 import { ExecCommand, type ExecMode, type ExecRequest } from "./exec-command.ts";
 import { FolderRange } from "./folder-range.ts";
@@ -26,9 +26,9 @@ async function runLeeway(): Promise<void> {
     const request = SUBCOMMANDS.has(subcommand ?? "") ? undefined : ExecCommand.requestOf(args);
 
     if (request) {
-        await execWithPorts(CatalogueFile.find(process.cwd()), request);
+        await execWithPorts(ConfigFile.find(process.cwd()), request);
     } else if (subcommand === "env" && rest.length === 1 && rest[0] === "--export") {
-        await printExportLines(CatalogueFile.find(process.cwd()));
+        await printExportLines(ConfigFile.find(process.cwd()));
     } else if (subcommand === "list" && rest.length === 0) {
         process.stdout.write(RangeListing.render(RangeListing.collect(RangeRegistry.livingEntries(), ListenerScan.listeners())));
     } else if (subcommand === "kill" && rest.length <= 1 && rest.every(arg => /^\d+$/.test(arg))) {
@@ -38,19 +38,19 @@ async function runLeeway(): Promise<void> {
     }
 }
 
-async function execWithPorts(found: FoundCatalogue, { mode, command }: ExecRequest): Promise<void> {
+async function execWithPorts(found: FoundConfig, { mode, command }: ExecRequest): Promise<void> {
     const ports = await portsOfMode(found, mode);
 
     RunWithPorts.runAndExit(ExecCommand.commandLine(command, ports), ports);
 }
 
-async function portsOfMode(found: FoundCatalogue, mode: ExecMode): Promise<Record<string, number>> {
+async function portsOfMode(found: FoundConfig, mode: ExecMode): Promise<Record<string, number>> {
     if (mode === "inherit") {
-        return devPorts(found.catalogue);
+        return devPorts(found.config);
     }
 
     if (mode === "default") {
-        const ports = devPorts(found.catalogue, {});
+        const ports = devPorts(found.config, {});
 
         process.stderr.write(FolderRange.table(found.folder, ports));
 
@@ -64,7 +64,7 @@ async function portsOfMode(found: FoundCatalogue, mode: ExecMode): Promise<Recor
     return claim.entry.ports;
 }
 
-async function printExportLines(found: FoundCatalogue): Promise<void> {
+async function printExportLines(found: FoundConfig): Promise<void> {
     const ports = await portsOfMode(found, "claim");
 
     process.stdout.write(
@@ -79,7 +79,7 @@ function killRange(port: string | undefined): void {
     const listeners = ListenerScan.listeners().filter(listener => listener.pid !== process.pid);
     const plan =
         port === undefined
-            ? RangeKill.planOfFolder(entries, listeners, CatalogueFile.find(process.cwd()).folder, process.platform)
+            ? RangeKill.planOfFolder(entries, listeners, ConfigFile.find(process.cwd()).folder, process.platform)
             : RangeKill.planOfPort(entries, listeners, Number(port));
     const failures = new Map<number, string>();
 

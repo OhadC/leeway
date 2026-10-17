@@ -27,10 +27,11 @@ Alternatives considered:
 
 ## Decision
 
-**Catalogue.** Each repo declares its ports in one `leeway.json`: `{ "NAME": { "port": <default port>, ...any props } }`. The key is the
-environment variable the port travels in, `port` is the default port. The catalogue is found by walking up from the current directory, and
+**Config and catalogue.** Each repo has one `leeway.json`: `{ "ports": { "NAME": { "port": <default port>, ...any props } }, "agentGuard"?: <boolean> }`.
+Its `ports` are the catalogue: the key is the environment variable the port travels in, `port` is the default port. Settings sit beside
+`ports` and unknown ones are refused, so a typo fails loudly. The config is found by walking up from the current directory, and
 the nearest wins; the folder holding it owns the range, so every worktree, or a sub-package with its own `leeway.json`, claims separately.
-Every consumer resolves `env[NAME] ?? default` through `devPorts(catalogue)`; no literal port is left in configs.
+Every consumer resolves `env[NAME] ?? default` through `devPorts(config)`; no literal port is left in configs.
 
 **Ranges in a machine-wide registry.** A folder's range is recorded in `~/.leeway/ranges.json`: a format `version` and a map from absolute
 folder path (lowercased on Windows) to `{ start, end, ports }`, with `ports` naming each port. A range is exactly as wide as its catalogue,
@@ -75,9 +76,10 @@ it; on Windows, which has no process groups to signal, Ctrl+C, Ctrl+Break and co
 fails instead of drifting, and on `serve` defines `__LEEWAY_ENV__` so browser code sees the server's ports. Builds keep default ports unless
 `alwaysInject` is set, so dev ports never leak into a production bundle.
 
-**Agents.** Agents forget rules, so leeway makes forgetting loud. `devPorts` throws in an agent shell (`CLAUDECODE`, `GEMINI_CLI`,
+**Agents.** Agents forget rules, so a repo can make forgetting loud. With `"agentGuard": true`, `devPorts` throws in an agent shell (`CLAUDECODE`, `GEMINI_CLI`,
 `CURSOR_AGENT`, `AI_AGENT`) when none of the catalogue's variables are set, except under `VITEST`, where app modules read ports at import
-time. Claude Code gets its range up front: a SessionStart hook appends `leeway env --export` to `$CLAUDE_ENV_FILE`, which is sourced before
+time. The guard is off by default: a repo whose agents always go through `leeway` doesn't need it, and on it blocks every tool an agent
+starts outside `leeway` without ports. Claude Code gets its range up front: a SessionStart hook appends `leeway env --export` to `$CLAUDE_ENV_FILE`, which is sourced before
 every Bash command. Claude Code's PowerShell tool honours that file only when every line is a plain export, so `leeway env --export` writes only `export NAME=port` lines to stdout and everything else to
 stderr. The earlier `dev-ports` rewrote every `pnpm <script>` in a PreToolUse hook; exporting the range once per session covers every command,
 not just package scripts. Other agents are
@@ -102,5 +104,5 @@ just the listeners on it; it never kills outside the pool. The scan uses PowerSh
 - A port can still be taken between the claim and the server binding it; `strictPort` and bind errors make that loud.
 - The pool is never compacted and can fragment; a full pool fails with a message to remove unused folders' ranges.
 - A hard kill of `leeway` itself skips its cleanup and can leave the command tree running on any OS; `leeway kill` recovers it.
-- Anything spawned with a scrubbed environment loses its ports, and in an agent shell hits the guard.
+- Anything spawned with a scrubbed environment loses its ports, and in an agent shell of a guarded repo hits the guard.
 - Reading a vite config no longer shows the port.

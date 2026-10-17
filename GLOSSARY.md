@@ -7,9 +7,13 @@ agents never fight over them.
 
 ### Ports
 
+**Config**:
+A repo's `leeway.json`: its catalogue plus the settings that apply to it.
+_Avoid_: settings file, manifest
+
 **Catalogue**:
-The list of ports a repo's dev setup uses, each with a port name and a default port, declared in `leeway.json`.
-_Avoid_: config, manifest, port map
+The list of ports a repo's dev setup uses, each with a port name and a default port; the `ports` of the config.
+_Avoid_: port map, port list
 
 **Port name**:
 A catalogue entry's name; it is also the environment variable the port travels in.
@@ -22,7 +26,7 @@ _Avoid_: base port, usual port, fixed port
 ### Ownership
 
 **Folder**:
-The folder holding the nearest catalogue; the unit that owns a range.
+The folder holding the nearest config; the unit that owns a range.
 _Avoid_: root, project, worktree, repo
 
 **Pool**:
@@ -58,5 +62,5 @@ A shell an AI coding agent runs commands in, recognised by a marker environment 
 _Avoid_: AI session, bot
 
 **Agent guard**:
-The refusal to hand default ports to an agent shell that has no ports of its own.
+The refusal to hand default ports to an agent shell that has no ports of its own; off unless the config turns it on.
 _Avoid_: agent check, safety net

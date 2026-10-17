@@ -60,7 +60,10 @@ describe("leeway env --export", () => {
 
         const first = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
         LeewayCli.run(["env", "--export"], neighbour, home);
-        fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify({ ...LeewayCli.catalogue, PORT_DOCS: { port: 8080 } }));
+        fs.writeFileSync(
+            path.join(dir, "leeway.json"),
+            JSON.stringify({ ports: { ...LeewayCli.config.ports, PORT_DOCS: { port: 8080 } } }),
+        );
         const moved = LeewayCli.run(["env", "--export"], dir, home);
 
         expect(moved.stdout).toMatch(/^(export [A-Z_][A-Z0-9_]*=\d+\n){3}$/);
@@ -98,6 +101,7 @@ describe("leeway <command>", () => {
 
     it("--default puts each default port in place of {{NAME}} and in the env, ignoring the environment and the agent guard", () => {
         const { dir, home } = temporaryProject();
+        fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify({ ...LeewayCli.config, agentGuard: true }));
 
         const result = LeewayCli.run(["--default", "--", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, { PORT_WEB: "24000" });
         const agent = LeewayCli.run(["--default", "--", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, { CLAUDECODE: "1" });
@@ -152,13 +156,17 @@ describe("leeway errors", () => {
         });
     });
 
-    it("--inherit refuses default ports to an agent shell that has no ports", () => {
+    it("--inherit gives an agent shell without ports the default ports, unless the config turns the agent guard on", () => {
         const { dir, home } = temporaryProject();
+        const inherit = ["--inherit", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"];
 
-        const result = LeewayCli.run(["--inherit", "node", "-e", "process.exit(0)"], dir, home, { CLAUDECODE: "1" });
+        expect(LeewayCli.run(inherit, dir, home, { CLAUDECODE: "1" }).stdout).toBe("argument 5173, env 5173 3001\n");
 
-        expect(result.status).toBe(1);
-        expect(result.stderr).toMatch(/^leeway: agent shell detected/);
+        fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify({ ...LeewayCli.config, agentGuard: true }));
+        const guarded = LeewayCli.run(inherit, dir, home, { CLAUDECODE: "1" });
+
+        expect(guarded.status).toBe(1);
+        expect(guarded.stderr).toMatch(/^leeway: agent shell detected/);
     });
 
     it("fails with a leeway: message outside a folder with leeway.json", () => {

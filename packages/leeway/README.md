@@ -23,19 +23,30 @@ npm install -D leeway
 
 Requires Node >= 22.18. `leeway/vite` needs vite >= 7.
 
-## The catalogue: `leeway.json`
+## The config: `leeway.json`
 
-One `leeway.json` at the repo root lists every port your dev setup uses. The key is the environment variable (letters, digits and `_`, not starting with a digit), `port` is its default
-port. Any other properties are yours; leeway ignores them.
+One `leeway.json` at the repo root. Its `ports`, the catalogue, list every port your dev setup uses: the key is the environment variable
+(letters, digits and `_`, not starting with a digit), `port` is its default port. Any other properties of an entry are yours; leeway
+ignores them.
 
 ```json
 {
-    "PORT_WEB": { "port": 5173 },
-    "PORT_API": { "port": 3001, "description": "mock api" }
+    "ports": {
+        "PORT_WEB": { "port": 5173 },
+        "PORT_API": { "port": 3001, "description": "mock api" }
+    },
+    "agentGuard": true
 }
 ```
 
-leeway finds the catalogue by walking up from the current directory; the nearest `leeway.json` wins, and the folder holding it is the
+| setting      | default | meaning                                                                |
+| ------------ | ------- | ---------------------------------------------------------------------- |
+| `ports`      | -       | the catalogue; required                                                |
+| `agentGuard` | `false` | refuse default ports to agent shells (see [Agent guard](#agent-guard)) |
+
+Unknown settings are refused, so a typo fails loudly.
+
+leeway finds the config by walking up from the current directory; the nearest `leeway.json` wins, and the folder holding it is the
 folder that owns the range. Commit it: every worktree gets its own copy and therefore its own range.
 
 ## Ranges and the registry
@@ -66,35 +77,37 @@ Default ports never touch the registry.
 
 ```ts
 import { devPorts } from "leeway";
-import catalogue from "./leeway.json" with { type: "json" };
+import config from "./leeway.json" with { type: "json" };
 
-const { PORT_API } = devPorts(catalogue);
+const { PORT_API } = devPorts(config);
 
 server.listen(PORT_API);
 ```
 
-`devPorts(catalogue)` returns one port per catalogue entry: the entry's environment variable if it is set to a port, else the default
+`devPorts(config)` returns one port per catalogue entry: the entry's environment variable if it is set to a port, else the default
 port. It is browser-safe: in the browser it reads the ports the vite plugin injected (see below), and falls back to default ports when
 there are none.
 
-**Agent guard.** In an agent shell (`CLAUDECODE`, `GEMINI_CLI`, `CURSOR_AGENT` or `AI_AGENT` set), `devPorts` throws if none of the
-catalogue's variables are set, so an agent can't silently start a server on your default ports. It is skipped under `VITEST`, because app
-modules often read ports at import time in tests. Codex sets no reliable marker, and Copilot and Aider document none, so for them the
-guard can't fire; tell them to start servers through `leeway` (see [Agents](#agents)).
+### Agent guard
+
+With `"agentGuard": true`, `devPorts` throws in an agent shell (`CLAUDECODE`, `GEMINI_CLI`, `CURSOR_AGENT` or `AI_AGENT` set) when none
+of the catalogue's variables are set, so an agent can't silently start a server on your default ports. It is off by default. It is skipped
+under `VITEST`, because app modules often read ports at import time in tests. Codex sets no reliable marker, and Copilot and Aider document
+none, so for them the guard can't fire; tell them to start servers through `leeway` (see [Agents](#agents)).
 
 ## Vite: `leeway/vite`
 
 ```ts
 import { leeway } from "leeway/vite";
 import { defineConfig } from "vite";
-import catalogue from "./leeway.json" with { type: "json" };
+import config from "./leeway.json" with { type: "json" };
 
 export default defineConfig({
-    plugins: [leeway({ catalogue, port: "PORT_WEB", preview: "PORT_WEB" })],
+    plugins: [leeway({ config, port: "PORT_WEB", preview: "PORT_WEB" })],
 });
 ```
 
-Passing the catalogue types `port` and `preview` against its names. Without it, the plugin finds `leeway.json` from vite's `root`:
+Passing the config types `port` and `preview` against its port names. Without it, the plugin finds `leeway.json` from vite's `root`:
 
 ```ts
 leeway({ port: "PORT_WEB" });
@@ -104,7 +117,7 @@ The plugin:
 
 - sets `server.port` (and `preview.port` when `preview` is given) from `devPorts`, with `strictPort: true`, so a taken port fails loudly
   instead of drifting to port+1;
-- on `vite serve`, defines `__LEEWAY_ENV__` with every catalogue port, so `devPorts(catalogue)` in browser code sees the same ports as the
+- on `vite serve`, defines `__LEEWAY_ENV__` with every catalogue port, so `devPorts(config)` in browser code sees the same ports as the
   server. Builds keep default ports unless you pass `alwaysInject: true`.
 
 ## CLI
@@ -195,7 +208,7 @@ This is why `leeway env --export` prints nothing but plain `export NAME=port` li
 `$CLAUDE_ENV_FILE` only when every line is a plain export, and in Bash a table or a warning there would run as a command.
 
 **Other agents** (Codex, Gemini CLI, Cursor, Copilot, Aider, ...): tell them in `AGENTS.md` to start servers with
-`leeway <command>`. Where the agent sets a marker, the agent guard catches the times it forgets.
+`leeway <command>`. Where the agent sets a marker, turning on the agent guard catches the times it forgets.
 
 ## Limits
 

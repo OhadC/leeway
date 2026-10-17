@@ -12,12 +12,12 @@ Per-folder dev port ranges. `packages/leeway` is the library + CLI; `examples/pl
 ## Conventions
 
 - No code comments, including doc comments.
-- Specific export names: `RangeRegistry.claim`, not `claim`; `CatalogueFile.find`, not `find`. No generic `parse`, `getKey`, `utils`.
+- Specific export names: `RangeRegistry.claim`, not `claim`; `ConfigFile.find`, not `find`. No generic `parse`, `getKey`, `utils`.
 - Prefer one static class per concept over scattered helper functions.
 - Order inside a module: public members first, private members next, module-level helpers at the bottom.
 - Tests must be able to go red on a real bug. No tautological tests (asserting a mock returns what it was told to, or restating the implementation).
 - Keep it simple, YAGNI. No speculative options or abstractions.
-- No "slot" wording anywhere; the concepts are catalogue, range, registry, default ports.
+- No "slot" wording anywhere; the concepts are config, catalogue, range, registry, default ports.
 - Relative imports use the `.ts` extension; TypeScript is erasable-syntax only (no enums, namespaces, parameter properties).
 - Parsing OS command output takes an injected command runner so it is unit-tested on any OS. Spawning, signalling and killing real processes is not faked: it is covered by real-process tests on each OS (Windows locally, linux via `pnpm test:linux`, mac in CI).
 

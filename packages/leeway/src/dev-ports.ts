@@ -1,15 +1,22 @@
 export type LeewayCatalogue = Record<string, { port: number }>;
 
+export type LeewayConfig = {
+    ports: LeewayCatalogue;
+    agentGuard?: boolean;
+};
+
 export type LeewayEnv = Record<string, string | number | undefined>;
 
-export type PortsOf<T> = Record<keyof T & string, number>;
+export type PortsOf<T extends LeewayConfig> = Record<keyof T["ports"] & string, number>;
 
 declare const __LEEWAY_ENV__: Record<string, number> | undefined;
 
 const AGENT_MARKERS = ["CLAUDECODE", "GEMINI_CLI", "CURSOR_AGENT", "AI_AGENT"];
 
-export function devPorts<T extends LeewayCatalogue>(catalogue: T, env: LeewayEnv = currentEnv()): PortsOf<T> {
-    if (isAgentShell(env) && !env.VITEST && !Object.keys(catalogue).some(name => env[name])) {
+export function devPorts<T extends LeewayConfig>(config: T, env: LeewayEnv = currentEnv()): PortsOf<T> {
+    const catalogue = config.ports;
+
+    if (config.agentGuard && isAgentShell(env) && !env.VITEST && !Object.keys(catalogue).some(name => env[name])) {
         throw new Error("leeway: agent shell detected without leeway ports; run through `leeway <command>` or `leeway env --export`");
     }
 

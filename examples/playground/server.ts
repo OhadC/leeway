@@ -1,8 +1,8 @@
 import http from "node:http";
 import { devPorts } from "leeway";
-import catalogue from "./leeway.json" with { type: "json" };
+import config from "./leeway.json" with { type: "json" };
 
-const port = devPorts(catalogue).PORT_API;
+const port = devPorts(config).PORT_API;
 
 http.createServer((_, response) => {
     response.writeHead(200, { "Access-Control-Allow-Origin": "*", "Content-Type": "text/plain" });

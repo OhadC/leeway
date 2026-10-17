@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 export class LeewayCli {
-    static readonly catalogue = { PORT_WEB: { port: 5173 }, PORT_API: { port: 3001 } };
+    static readonly config = { ports: { PORT_WEB: { port: 5173 }, PORT_API: { port: 3001 } } };
 
     static readonly cliPath = path.join(import.meta.dirname, "..", "src", "cli.ts");
 
@@ -45,7 +45,7 @@ if (-not [Leeway.Console]::GenerateConsoleCtrlEvent(0, 0)) { exit 3 }`,
         const dir = LeewayCli.temporaryDir("leeway-project-");
         const home = LeewayCli.temporaryDir("leeway-home-");
 
-        fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify(LeewayCli.catalogue));
+        fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify(LeewayCli.config));
 
         return { dir, home };
     }
@@ -78,7 +78,7 @@ if (-not [Leeway.Console]::GenerateConsoleCtrlEvent(0, 0)) { exit 3 }`,
         "CURSOR_AGENT",
         "AI_AGENT",
         "VITEST",
-        ...Object.keys(LeewayCli.catalogue),
+        ...Object.keys(LeewayCli.config.ports),
     ];
 
     private static readonly temporaryDirs: string[] = [];

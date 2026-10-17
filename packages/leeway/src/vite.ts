@@ -1,15 +1,15 @@
 import type { Plugin, UserConfig } from "vite";
-import { CatalogueFile } from "./catalogue-file.ts";
-import { devPorts, type LeewayCatalogue } from "./dev-ports.ts";
+import { ConfigFile } from "./config-file.ts";
+import { devPorts, type LeewayConfig } from "./dev-ports.ts";
 
-export type LeewayViteOptions<T extends LeewayCatalogue> = {
-    catalogue?: T;
-    port: NoInfer<keyof T & string>;
-    preview?: NoInfer<keyof T & string>;
+export type LeewayViteOptions<T extends LeewayConfig> = {
+    config?: T;
+    port: NoInfer<keyof T["ports"] & string>;
+    preview?: NoInfer<keyof T["ports"] & string>;
     alwaysInject?: boolean;
 };
 
-export function leeway<T extends LeewayCatalogue = LeewayCatalogue>(options: LeewayViteOptions<T>): Plugin {
+export function leeway<T extends LeewayConfig = LeewayConfig>(options: LeewayViteOptions<T>): Plugin {
     return {
         name: "leeway",
         config(userConfig, { command }) {
@@ -17,8 +17,8 @@ export function leeway<T extends LeewayCatalogue = LeewayCatalogue>(options: Lee
                 return {};
             }
 
-            const catalogue = options.catalogue ?? CatalogueFile.find(userConfig.root ?? process.cwd()).catalogue;
-            const ports: Record<string, number> = devPorts(catalogue);
+            const leewayConfig = options.config ?? ConfigFile.find(userConfig.root ?? process.cwd()).config;
+            const ports: Record<string, number> = devPorts(leewayConfig);
             const config: UserConfig = { server: { port: portNamed(ports, options.port), strictPort: true } };
 
             if (options.preview) {

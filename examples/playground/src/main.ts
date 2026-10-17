@@ -1,7 +1,7 @@
 import { devPorts } from "leeway";
-import catalogue from "../leeway.json" with { type: "json" };
+import config from "../leeway.json" with { type: "json" };
 
-const ports = devPorts(catalogue);
+const ports = devPorts(config);
 
 document.querySelector("#ports")!.textContent = JSON.stringify(ports, null, 4);
 
