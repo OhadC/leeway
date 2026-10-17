@@ -1,0 +1,23 @@
+{
+    "name": "leeway-workspace",
+    "private": true,
+    "type": "module",
+    "engines": {
+        "node": ">=22.18"
+    },
+    "scripts": {
+        "build": "pnpm --filter leeway build",
+        "test": "pnpm --filter leeway test",
+        "typecheck": "pnpm -r typecheck",
+        "lint": "oxlint . && oxfmt --check .",
+        "format": "oxfmt .",
+        "test:linux": "node scripts/test-linux.ts"
+    },
+    "devDependencies": {
+        "@types/node": "^26.6.5",
+        "oxfmt": "^0.73.0",
+        "oxlint": "^1.88.0",
+        "typescript": "^7.0.2"
+    },
+    "packageManager": "pnpm@12.9.1"
+}

@@ -1,0 +1,17 @@
+{
+    "name": "leeway-playground",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "leeway exec --claim -- vite",
+        "api": "leeway exec --claim -- node server.ts",
+        "dev:defaults": "leeway exec --defaults -- vite",
+        "typecheck": "tsc -p tsconfig.json"
+    },
+    "dependencies": {
+        "leeway": "workspace:*"
+    },
+    "devDependencies": {
+        "vite": "^8.3.4"
+    }
+}
