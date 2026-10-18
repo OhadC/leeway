@@ -23,7 +23,9 @@ describe("devPorts", () => {
         expect(devPorts(config, { PORT_API: 21001 }).PORT_API).toBe(21001);
     });
 
-    it("falls back to the default port when the variable is empty or not a positive integer", () => {
+    it("falls back to the default port when the variable is empty or not a port number", () => {
+        expect(devPorts(config, { PORT_WEB: "65535" }).PORT_WEB).toBe(65535);
+        expect(devPorts(config, { PORT_WEB: "65536" }).PORT_WEB).toBe(5173);
         expect(devPorts(config, { PORT_WEB: "" }).PORT_WEB).toBe(5173);
         expect(devPorts(config, { PORT_WEB: "not-a-port" }).PORT_WEB).toBe(5173);
         expect(devPorts(config, { PORT_WEB: "-1" }).PORT_WEB).toBe(5173);

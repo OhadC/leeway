@@ -68,7 +68,7 @@ repo on the machine:
 - A claim keeps the folder's current range whenever its ports are still free (or held by the folder's own running servers). Otherwise
   it takes the lowest gap that overlaps no other range and whose ports can all be bound, and warns that the range moved.
 - Ports held by something else, or reserved by the OS, are skipped at claim time.
-- Ranges of folders that no longer exist are dropped on the next claim.
+- Ranges of folders that no longer exist are dropped the next time a claim has to place a range.
 - Claims are serialised by a lock next to the registry, so concurrent `leeway` runs never get the same range.
 
 Default ports never touch the registry.
@@ -257,7 +257,7 @@ This is why `leeway env --export` prints nothing but plain `export NAME=port` li
 - The pool is never compacted, so it can fragment. A full pool fails with a message; remove unused folders' ranges from
   `~/.leeway/ranges.json`.
 - The pool is not configurable, and there is no `leeway init`: write `leeway.json` by hand.
-- `leeway list` and `leeway kill` scan listeners with PowerShell on Windows, `ss` on Linux and `lsof` on macOS. Without root on Linux and macOS they see
+- `leeway list` and `leeway kill` scan listeners with `netstat` on Windows, `ss` on Linux and `lsof` on macOS. Without root on Linux and macOS they see
   only your own processes.
 - `leeway kill` recognises a `leeway` run by its command line (`.../leeway/dist/cli.mjs`, or a `bin/leeway` or `.bin/leeway` link to it). A listener whose `leeway` run is gone is
   killed alone, so a watcher above it can still restart it.

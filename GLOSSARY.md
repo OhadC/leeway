@@ -46,7 +46,7 @@ Taking a range for a folder: its current range when still usable, else the lowes
 _Avoid_: allocate, assign, lease, reserve
 
 **Living range**:
-A range whose folder still exists. Ranges of deleted folders stop counting and are dropped on the next claim.
+A range whose folder still exists. Ranges of deleted folders stop counting and are dropped the next time a claim has to place a range.
 _Avoid_: active, valid, stale
 
 ### Running

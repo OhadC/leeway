@@ -1,4 +1,4 @@
-import type { Plugin, UserConfig } from "vite";
+import type { Plugin } from "vite";
 import { ConfigFile } from "./config-file.ts";
 import { devPorts, type LeewayConfig } from "./dev-ports.ts";
 
@@ -19,16 +19,11 @@ export function leeway<T extends LeewayConfig = LeewayConfig>(options: LeewayVit
 
             const leewayConfig = options.config ?? ConfigFile.find(userConfig.root ?? process.cwd()).config;
             const ports: Record<string, number> = devPorts(leewayConfig);
-            const config: UserConfig = {
+            return {
                 server: { port: portNamed(ports, options.port), strictPort: true },
                 preview: { port: portNamed(ports, options.preview ?? options.port), strictPort: true },
+                define: { __LEEWAY_ENV__: JSON.stringify(ports) },
             };
-
-            if (command === "serve" || options.alwaysInject) {
-                config.define = { __LEEWAY_ENV__: JSON.stringify(ports) };
-            }
-
-            return config;
         },
     };
 }

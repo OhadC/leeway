@@ -4,7 +4,19 @@ import { ListenerScan } from "./listener-scan.ts";
 import type { CommandRunner } from "./os-command.ts";
 import { RangeRegistry } from "./range-registry.ts";
 
-const WINDOWS_CSV = ['"LocalPort","OwningProcess"', '"21001","4321"', '"21000","1234"', ""].join("\r\n");
+const WINDOWS_NETSTAT = [
+    "",
+    "Active Connections",
+    "",
+    "  Proto  Local Address          Foreign Address        State           PID",
+    "  TCP    0.0.0.0:21001          0.0.0.0:0              LISTENING       4321",
+    "  TCP    127.0.0.1:21000        0.0.0.0:0              ABHÖREN         1234",
+    "  TCP    127.0.0.1:21000        127.0.0.1:52144        ESTABLISHED     1234",
+    "  TCP    127.0.0.1:52144        127.0.0.1:21000        ESTABLISHED     9000",
+    "  TCP    [::1]:21002            [::]:0                 LISTENING       555",
+    "  UDP    0.0.0.0:21003          *:*                                    666",
+    "",
+].join("\r\n");
 
 const LINUX_SS = [
     'LISTEN 0      511          0.0.0.0:21001      0.0.0.0:*    users:(("node",pid=4321,fd=20))',
@@ -34,17 +46,22 @@ const MAC_LSOF = [
 ].join("\n");
 
 describe("ListenerScan.listeners", () => {
-    it("reads windows listeners as port and pid, ordered by port", () => {
-        expect(ListenerScan.listeners("win32", printed(WINDOWS_CSV))).toEqual([
+    it("reads windows listeners from netstat as port and pid, ordered by port, whatever the display language", () => {
+        expect(ListenerScan.listeners("win32", printed(WINDOWS_NETSTAT))).toEqual([
             { port: 21000, pid: 1234 },
             { port: 21001, pid: 4321 },
+            { port: 21002, pid: 555 },
         ]);
     });
 
     it("reports a pid listening on several addresses of the same port once", () => {
-        const csv = ['"LocalPort","OwningProcess"', '"21000","1234"', '"21000","1234"', '"21000","777"'].join("\r\n");
+        const netstat = [
+            "  TCP    0.0.0.0:21000          0.0.0.0:0              LISTENING       1234",
+            "  TCP    [::]:21000             [::]:0                 LISTENING       1234",
+            "  TCP    127.0.0.1:21000        0.0.0.0:0              LISTENING       777",
+        ].join("\r\n");
 
-        expect(ListenerScan.listeners("win32", printed(csv))).toEqual([
+        expect(ListenerScan.listeners("win32", printed(netstat))).toEqual([
             { port: 21000, pid: 777 },
             { port: 21000, pid: 1234 },
         ]);
@@ -91,7 +108,9 @@ describe("ListenerScan.listeners", () => {
     }, 30_000);
 
     it("refuses platforms it cannot scan yet", () => {
-        expect(() => ListenerScan.listeners("aix", printed(WINDOWS_CSV))).toThrow("leeway: listing listeners is not supported on aix yet");
+        expect(() => ListenerScan.listeners("aix", printed(WINDOWS_NETSTAT))).toThrow(
+            "leeway: listing listeners is not supported on aix yet",
+        );
     });
 });
 

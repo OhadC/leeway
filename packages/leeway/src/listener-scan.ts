@@ -5,9 +5,6 @@ export type PortListener = {
     pid: number;
 };
 
-const WINDOWS_SCAN_SCRIPT =
-    "Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Select-Object LocalPort,OwningProcess | ConvertTo-Csv -NoTypeInformation";
-
 export class ListenerScan {
     static listeners(platform: NodeJS.Platform = process.platform, run: CommandRunner = OsCommand.run): PortListener[] {
         const scanned = ListenerScan.scan(platform, run);
@@ -18,7 +15,7 @@ export class ListenerScan {
 
     private static scan(platform: NodeJS.Platform, run: CommandRunner): PortListener[] {
         if (platform === "win32") {
-            return ListenerScan.windowsListeners(OsCommand.powershell(run, WINDOWS_SCAN_SCRIPT));
+            return ListenerScan.windowsListeners(OsCommand.output(run, "netstat", ["-ano"]));
         }
 
         if (platform === "linux") {
@@ -32,9 +29,9 @@ export class ListenerScan {
         throw new Error(`leeway: listing listeners is not supported on ${platform} yet`);
     }
 
-    private static windowsListeners(csv: string): PortListener[] {
-        return csv.split(/\r?\n/).flatMap(line => {
-            const match = /^"?(\d+)"?,"?(\d+)"?$/.exec(line.trim());
+    private static windowsListeners(output: string): PortListener[] {
+        return output.split(/\r?\n/).flatMap(line => {
+            const match = /^\s*TCP\s+\S+:(\d+)\s+\S+:0\s.*\s(\d+)\s*$/.exec(line);
 
             return match ? [{ port: Number(match[1]), pid: Number(match[2]) }] : [];
         });

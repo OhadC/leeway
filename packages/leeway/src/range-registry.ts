@@ -124,15 +124,16 @@ export class RangeRegistry {
             );
         }
 
-        const living = Object.entries(registry.folders).filter(([key]) => pathExists(key));
+        const entries = Object.entries(registry.folders);
         const isOwn = ([key]: [string, unknown]) => RangeRegistry.folderKey(key, platform) === folder;
-        const others = living.filter(pair => !isOwn(pair));
-        const current = living
+        const current = entries
             .filter(isOwn)
             .map(([, value]) => value)
             .find(RangeRegistry.isStoredRange);
-        const occupied = others.map(([, value]) => value).filter(RangeRegistry.isStoredRange);
-        const range = await RangeRegistry.allocate(current, occupied, names, testPort);
+        const others = entries.filter(pair => !isOwn(pair));
+        const kept = current && (await RangeRegistry.keep(current, names, RangeRegistry.storedRanges(others), testPort));
+        const living = kept ? others : others.filter(([key]) => pathExists(key));
+        const range = kept ?? (await RangeRegistry.allocate(current, RangeRegistry.storedRanges(living), names, testPort));
 
         if (!range) {
             throw new Error(
@@ -142,7 +143,7 @@ export class RangeRegistry {
 
         RangeRegistry.write(registryPath, {
             version: RangeRegistry.VERSION,
-            folders: { ...Object.fromEntries(others), [folder]: range },
+            folders: { ...Object.fromEntries(living), [folder]: range },
         });
 
         return { entry: { folder, ...range }, previous: current && { folder, ...current } };
@@ -197,6 +198,18 @@ export class RangeRegistry {
         }
     }
 
+    private static async keep(
+        current: StoredRange,
+        names: readonly string[],
+        stored: StoredRange[],
+        testPort: ClaimRangeOptions["testPort"],
+    ): Promise<StoredRange | undefined> {
+        const ownPorts = new Set(Object.values(current.ports));
+        const blocked = await RangeRegistry.firstBlockedPort(current.start, names.length, stored, ownPorts, testPort);
+
+        return blocked === undefined ? RangeRegistry.rangeAt(current.start, names) : undefined;
+    }
+
     private static async allocate(
         current: StoredRange | undefined,
         occupied: StoredRange[],
@@ -245,6 +258,10 @@ export class RangeRegistry {
         return registry as RegistryFile;
     }
 
+    private static storedRanges(pairs: [string, unknown][]): StoredRange[] {
+        return pairs.map(([, value]) => value).filter(RangeRegistry.isStoredRange);
+    }
+
     private static isStoredRange(value: unknown): value is StoredRange {
         if (!isObject(value)) {
             return false;
@@ -253,6 +270,10 @@ export class RangeRegistry {
         const { start, end, ports } = value as StoredRange;
 
         if (Object.keys(value).length !== 3 || !Number.isInteger(start) || !Number.isInteger(end) || !isObject(ports)) {
+            return false;
+        }
+
+        if (!RangeRegistry.isInPool(start) || !RangeRegistry.isInPool(end)) {
             return false;
         }
 

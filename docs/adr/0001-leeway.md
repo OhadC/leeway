@@ -39,10 +39,12 @@ and any tool can list and kill any repo's ports by reading entries, never by com
 every repo shares one allocator and one listing.
 
 **Pool 21000-29999.** All ranges come from this pool, so "is this port leeway's?" is a range check. It is above the low ports products use
-and clear of the earlier `dev-ports` layouts (20020-21999), so old and new tooling run side by side. It is not configurable.
+and clear of the earlier `dev-ports` layouts (20020-21999), so old and new tooling run side by side. It is not configurable. A stored range
+outside the pool is data the code doesn't understand, so it is never kept, listed or killed.
 
-**Claiming.** Under a lock, a claim drops entries whose folder is gone, tries the folder's current start first, so a repeat claim keeps its
-range and a grown catalogue stays put when the next ports are free, then every gap from low to high. It takes the first candidate that
+**Claiming.** Under a lock, a claim keeps the folder's range when it overlaps no other stored range and its ports pass the port test,
+without checking which folders still exist. Otherwise it drops entries whose folder is gone, tries the folder's current start first, so a grown catalogue
+stays put when the next ports are free, then every gap from low to high. It takes the first candidate that
 overlaps no living entry and whose ports all pass the port test. When the range moves, the CLI warns on stderr.
 
 **Port test.** It binds `127.0.0.1`, `::1`, `0.0.0.0` and `::`, because on Windows a wildcard bind succeeds while something listens on a
@@ -103,8 +105,9 @@ is spared: it can be a moved range's old server under a run that also serves the
 rejected: it puts lock contention on every run, leaves stale pids after a hard kill, and a reused pid would kill an unrelated tree; the live
 table has none of that. On Windows a parent pid is ignored when that process started after its child, since Windows reuses the pids of
 exited parents. `leeway list --json` prints the listing for tools, so they never parse the registry or filter out its deleted folders. The
-scan uses PowerShell's `Get-NetTCPConnection` on Windows, `ss` on Linux and `lsof` on macOS, behind an injected command runner so parsing is
-tested on any OS.
+scan uses `netstat -ano` on Windows, `ss` on Linux and `lsof` on macOS, behind an injected command runner so parsing is tested on any OS.
+On Windows a TCP row whose foreign port is 0 is a listener, so the localized state column is never read; PowerShell's
+`Get-NetTCPConnection` was rejected for taking seconds to start.
 
 **Rejected scope.** No `leeway init`: the catalogue is a few lines written by hand. No configurable pool. No pool compaction.
 

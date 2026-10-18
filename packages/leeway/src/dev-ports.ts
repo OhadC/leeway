@@ -26,7 +26,7 @@ export function devPorts<T extends LeewayConfig>(config: T, env: LeewayEnv = cur
 function configuredPort(value: string | number | undefined): number | undefined {
     const port = Number(value);
 
-    return value !== "" && Number.isInteger(port) && port > 0 ? port : undefined;
+    return value !== "" && Number.isInteger(port) && port > 0 && port <= 65535 ? port : undefined;
 }
 
 function isAgentShell(env: LeewayEnv): boolean {
