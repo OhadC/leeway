@@ -1,8 +1,15 @@
 {
     "name": "leeway",
-    "version": "0.0.0",
+    "version": "0.1.0",
     "description": "Per-folder dev port ranges so parallel worktrees and agents never fight over ports",
     "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/OhadC/leeway.git",
+        "directory": "packages/leeway"
+    },
+    "homepage": "https://github.com/OhadC/leeway/tree/main/packages/leeway#readme",
+    "bugs": "https://github.com/OhadC/leeway/issues",
     "type": "module",
     "engines": {
         "node": ">=22.18"
@@ -15,6 +22,7 @@
     },
     "scripts": {
         "build": "tsdown",
+        "prepublishOnly": "pnpm build",
         "test": "vitest",
         "typecheck": "tsc -p tsconfig.json"
     },
