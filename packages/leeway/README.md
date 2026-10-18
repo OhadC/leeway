@@ -1,5 +1,9 @@
 # leeway
 
+[![npm](https://img.shields.io/npm/v/leeway)](https://www.npmjs.com/package/leeway)
+[![ci](https://github.com/OhadC/leeway/actions/workflows/ci.yml/badge.svg)](https://github.com/OhadC/leeway/actions/workflows/ci.yml)
+[![license](https://img.shields.io/github/license/OhadC/leeway)](https://github.com/OhadC/leeway/blob/main/LICENSE)
+
 Per-folder dev port ranges, so parallel worktrees and AI agents never fight over ports.
 
 Two checkouts of the same repo both want port 5173. One fails with `EADDRINUSE`, or vite quietly moves to 5174 and the other worktree's
