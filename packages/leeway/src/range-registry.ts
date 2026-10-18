@@ -133,7 +133,7 @@ export class RangeRegistry {
         const others = entries.filter(pair => !isOwn(pair));
         const kept = current && (await RangeRegistry.keep(current, names, RangeRegistry.storedRanges(others), testPort));
         const living = kept ? others : others.filter(([key]) => pathExists(key));
-        const range = kept ?? (await RangeRegistry.allocate(current, RangeRegistry.storedRanges(living), names, testPort));
+        const range = kept ?? (await RangeRegistry.place(current, RangeRegistry.storedRanges(living), names, testPort));
 
         if (!range) {
             throw new Error(
@@ -210,7 +210,7 @@ export class RangeRegistry {
         return blocked === undefined ? RangeRegistry.rangeAt(current.start, names) : undefined;
     }
 
-    private static async allocate(
+    private static async place(
         current: StoredRange | undefined,
         occupied: StoredRange[],
         names: readonly string[],

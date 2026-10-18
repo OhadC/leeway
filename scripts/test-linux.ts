@@ -2,10 +2,10 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 const IMAGE = "leeway-linux-test";
-const root = path.resolve(import.meta.dirname, "..");
+const repoDir = path.resolve(import.meta.dirname, "..");
 const testArgs = process.argv.slice(2).join(" ");
 
-const build = spawnSync("podman", ["build", "-q", "-t", IMAGE, "-f", path.join(root, "scripts", "linux-test.Containerfile"), root], {
+const build = spawnSync("podman", ["build", "-q", "-t", IMAGE, "-f", path.join(repoDir, "scripts", "linux-test.Containerfile"), repoDir], {
     stdio: ["ignore", "ignore", "inherit"],
 });
 
@@ -19,7 +19,7 @@ const run = spawnSync(
         "run",
         "--rm",
         "-v",
-        `${root}:/src:ro`,
+        `${repoDir}:/src:ro`,
         IMAGE,
         "sh",
         "-c",

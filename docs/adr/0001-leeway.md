@@ -9,12 +9,12 @@ Accepted, 2026-10-17. leeway is extracted from the in-repo `dev-ports` tool; thi
 Several agents work in parallel git worktrees of one repository while the developer works in another. Every dev server, mock server and
 preview server bound a hardcoded port, so the second dev server on the machine failed with `EADDRINUSE`, or worse, vite moved to port+1 and
 tests in one worktree talked to a server of another. Nobody could say which folder was listening on which port without `netstat`
-archaeology, and the developer lost the usual ports whenever an agent needed a dev server. More than one repository on the machine has the
+archaeology, and the developer lost the default ports whenever an agent needed a dev server. More than one repository on the machine has the
 problem, each with a different number of ports.
 
 Alternatives considered:
 
-- **worktrunk** - a worktree manager that also assigns ports. It owns worktree creation, which is better left to other tools, and has no
+- **worktrunk** - a worktree manager that also hands out ports. It owns worktree creation, which is better left to other tools, and has no
   native Windows port-to-process listing.
 - **portless, `get-port`, `kill-port`** - pick a free port at start-up. A free port is not a predictable one: bookmarks, `launch.json` and
   test preflights need the URL before the server exists, and a listing would have nothing stable to report.
@@ -113,9 +113,9 @@ On Windows a TCP row whose foreign port is 0 is a listener, so the localized sta
 
 ## Consequences
 
-- One folder means one range whoever starts the server, and any number of folders and repos run at once; cross-service URLs follow the
+- One folder means one range whoever starts the server, and any number of folders and repos run at once; URLs between servers follow the
   range they belong to.
-- A small repo reserves only the ports it has, and no catalogue spills into another range.
+- A small repo takes only the ports it has, and no catalogue spills into another range.
 - Adding a server is one catalogue entry.
 - A freed range whose orphaned servers still listen, or a port held by an unrelated process or reserved by the OS, is skipped at claim time.
 - A port can still be taken between the claim and the server binding it; `strictPort` and bind errors make that loud.

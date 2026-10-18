@@ -13,7 +13,7 @@ afterEach(() => {
 describe("ConfigFile.find", () => {
     it("finds the config in a folder above the one it starts from", () => {
         const folder = tempFolder();
-        const nested = path.join(folder, "projects", "app", "src");
+        const nested = path.join(folder, "packages", "app", "src");
         fs.mkdirSync(nested, { recursive: true });
         writeConfig(folder, { ports: { PORT_APP: { port: 3000, app: "App" } } });
 

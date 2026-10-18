@@ -1,7 +1,7 @@
 import type { PortListener } from "./listener-scan.ts";
 import { RangeRegistry, type RangeEntry } from "./range-registry.ts";
 
-export type ListedPort = {
+type ListedPort = {
     name: string;
     port: number;
     pids: number[];

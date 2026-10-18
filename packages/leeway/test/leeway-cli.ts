@@ -41,8 +41,8 @@ if (-not [Leeway.Console]::GenerateConsoleCtrlEvent(0, 0)) { exit 3 }`,
         ).status;
     }
 
-    static project(): { dir: string; home: string } {
-        const dir = LeewayCli.temporaryDir("leeway-project-");
+    static folder(): { dir: string; home: string } {
+        const dir = LeewayCli.temporaryDir("leeway-folder-");
         const home = LeewayCli.temporaryDir("leeway-home-");
 
         fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify(LeewayCli.config));

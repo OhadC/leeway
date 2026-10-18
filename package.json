@@ -9,14 +9,25 @@
         "build": "pnpm --filter leeway build",
         "test": "pnpm --filter leeway test",
         "typecheck": "pnpm -r typecheck",
-        "lint": "oxlint . && oxfmt --check .",
+        "lint": "oxlint . && knip && node scripts/check-terms.ts",
         "format": "oxfmt .",
-        "test:linux": "node scripts/test-linux.ts"
+        "verify": "pnpm -s typecheck && pnpm -s lint && pnpm -s test --run",
+        "test:linux": "node scripts/test-linux.ts",
+        "prepare": "simple-git-hooks"
+    },
+    "simple-git-hooks": {
+        "pre-commit": "pnpm exec lint-staged"
+    },
+    "lint-staged": {
+        "*": "oxfmt --no-error-on-unmatched-pattern"
     },
     "devDependencies": {
         "@types/node": "^22.20.5",
+        "knip": "^6.41.0",
+        "lint-staged": "^17.6.0",
         "oxfmt": "^0.73.0",
         "oxlint": "^1.88.0",
+        "simple-git-hooks": "^2.14.0",
         "typescript": "^7.0.2"
     },
     "packageManager": "pnpm@12.9.1"

@@ -25,7 +25,7 @@ Requires Node >= 22.18. `leeway/vite` needs vite >= 7.
 
 ## The config: `leeway.json`
 
-One `leeway.json` at the repo root. Its `ports`, the catalogue, list every port your dev setup uses: the key is the environment variable
+One `leeway.json` at the top of the repo. Its `ports`, the catalogue, list every port your dev setup uses: the key is the environment variable
 (letters, digits and `_`, not starting with a digit), `port` is its default port. Any other properties of an entry are yours; leeway
 ignores them.
 
@@ -257,7 +257,7 @@ This is why `leeway env --export` prints nothing but plain `export NAME=port` li
 - The pool is never compacted, so it can fragment. A full pool fails with a message; remove unused folders' ranges from
   `~/.leeway/ranges.json`.
 - The pool is not configurable, and there is no `leeway init`: write `leeway.json` by hand.
-- `leeway list` and `leeway kill` scan listeners with `netstat` on Windows, `ss` on Linux and `lsof` on macOS. Without root on Linux and macOS they see
+- `leeway list` and `leeway kill` scan listeners with `netstat` on Windows, `ss` on Linux and `lsof` on macOS. Without sudo on Linux and macOS they see
   only your own processes.
 - `leeway kill` recognises a `leeway` run by its command line (`.../leeway/dist/cli.mjs`, or a `bin/leeway` or `.bin/leeway` link to it). A listener whose `leeway` run is gone is
   killed alone, so a watcher above it can still restart it.

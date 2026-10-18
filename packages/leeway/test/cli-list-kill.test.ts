@@ -28,7 +28,7 @@ afterEach(async () => {
 
 describe("leeway list and kill", () => {
     it("lists a server listening in the folder's range with its pid", async () => {
-        const { dir, home, ports } = claimedProject();
+        const { dir, home, ports } = claimedFolder();
         const server = await startServer(ports.PORT_WEB);
 
         const result = LeewayCli.run(["list"], dir, home);
@@ -40,7 +40,7 @@ describe("leeway list and kill", () => {
     }, 60_000);
 
     it("lists every range as JSON with --json", async () => {
-        const { dir, home, ports } = claimedProject();
+        const { dir, home, ports } = claimedFolder();
         const server = await startServer(ports.PORT_WEB);
 
         const result = LeewayCli.run(["list", "--json"], dir, home);
@@ -60,7 +60,7 @@ describe("leeway list and kill", () => {
     }, 60_000);
 
     it("kills what listens in the current folder's range", async () => {
-        const { dir, home, ports } = claimedProject();
+        const { dir, home, ports } = claimedFolder();
         const server = await startServer(ports.PORT_WEB);
 
         const result = LeewayCli.run(["kill"], dir, home);
@@ -71,7 +71,7 @@ describe("leeway list and kill", () => {
     }, 60_000);
 
     it("kills the leeway run above a listener, so a watcher can't restart it", async () => {
-        const { dir, home, ports } = claimedProject();
+        const { dir, home, ports } = claimedFolder();
         fs.writeFileSync(path.join(dir, "watcher.mjs"), WATCHER);
         const leeway = LeewayCli.start(["node", "watcher.mjs"], dir, home);
         const exited = new Promise(resolve => leeway.once("exit", resolve));
@@ -88,7 +88,7 @@ describe("leeway list and kill", () => {
     }, 60_000);
 
     it("kills an orphan listening in the pool outside every range", async () => {
-        const { home, ports } = claimedProject();
+        const { home, ports } = claimedFolder();
         const orphanPort = (ports.PORT_API ?? 0) + 100;
         const server = await startServer(orphanPort);
 
@@ -100,7 +100,7 @@ describe("leeway list and kill", () => {
     }, 60_000);
 
     it("kills only the listener on an orphan port, leaving the leeway run above it", async () => {
-        const { dir, home, ports } = claimedProject();
+        const { dir, home, ports } = claimedFolder();
         const orphanPort = (ports.PORT_API ?? 0) + 100;
         fs.writeFileSync(path.join(dir, "keeper.mjs"), KEEPER);
         const leeway = LeewayCli.start(["node", "keeper.mjs", String(orphanPort)], dir, home);
@@ -117,7 +117,7 @@ describe("leeway list and kill", () => {
     }, 60_000);
 
     it("kills the range holding a given port from any folder", async () => {
-        const { home, ports } = claimedProject();
+        const { home, ports } = claimedFolder();
         const server = await startServer(ports.PORT_WEB);
 
         const result = LeewayCli.run(["kill", String(ports.PORT_API)], home, home);
@@ -128,7 +128,7 @@ describe("leeway list and kill", () => {
     }, 60_000);
 
     it("says so when nothing listens in the range", () => {
-        const { dir, home, ports } = claimedProject();
+        const { dir, home, ports } = claimedFolder();
 
         const result = LeewayCli.run(["kill"], dir, home);
 
@@ -137,8 +137,8 @@ describe("leeway list and kill", () => {
     }, 60_000);
 });
 
-function claimedProject(): { dir: string; home: string; ports: Record<string, number> } {
-    const { dir, home } = LeewayCli.project();
+function claimedFolder(): { dir: string; home: string; ports: Record<string, number> } {
+    const { dir, home } = LeewayCli.folder();
     const ports = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
 
     return { dir, home, ports };

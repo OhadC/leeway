@@ -1,7 +1,7 @@
 import type { PortListener } from "./listener-scan.ts";
 import { RangeRegistry, type RangeEntry } from "./range-registry.ts";
 
-export type KillTarget = {
+type KillTarget = {
     pid: number;
     ports: number[];
 };

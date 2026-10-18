@@ -4,10 +4,13 @@ Per-folder dev port ranges. `packages/leeway` is the library + CLI; `examples/pl
 
 ## Commands
 
-- `pnpm test` - vitest in `packages/leeway` (add `-- --run` for a single run)
+- `pnpm verify` - typecheck + lint + tests once, real exit code; use it instead of chaining steps by hand
+- `pnpm test` - vitest in `packages/leeway` (add `--run` for a single run)
 - `pnpm typecheck` - tsc across the workspace
-- `pnpm lint` - oxlint + oxfmt check; `pnpm format` to fix
+- `pnpm lint` - oxlint + knip (unused exports, files, deps) + `scripts/check-terms.ts` (GLOSSARY.md _Avoid_ terms)
+- Formatting runs on commit: the pre-commit hook formats staged files with oxfmt. Don't run repo-wide `pnpm format`; CI checks formatting.
 - `pnpm build` - tsdown (tests never need it: integration tests run `node src/cli.ts`)
+- Done means `pnpm verify` is green, plus `pnpm test:linux` when touching `process-tree.ts`, `listener-scan.ts`, `range-kill.ts` or `run-with-ports.ts`.
 
 ## Conventions
 
@@ -17,7 +20,7 @@ Per-folder dev port ranges. `packages/leeway` is the library + CLI; `examples/pl
 - Order inside a module: public members first, private members next, module-level helpers at the bottom.
 - Tests must be able to go red on a real bug. No tautological tests (asserting a mock returns what it was told to, or restating the implementation).
 - Keep it simple, YAGNI. No speculative options or abstractions.
-- No "slot" wording anywhere; the concepts are config, catalogue, range, registry, default ports.
+- Use `GLOSSARY.md` terms everywhere; `pnpm lint` fails on its _Avoid_ words.
 - Relative imports use the `.ts` extension; TypeScript is erasable-syntax only (no enums, namespaces, parameter properties).
 - Parsing OS command output takes an injected command runner so it is unit-tested on any OS. Spawning, signalling and killing real processes is not faked: it is covered by real-process tests on each OS (Windows locally, linux via `pnpm test:linux`, mac in CI).
 
@@ -37,4 +40,4 @@ Default five: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`
 
 ### Domain docs
 
-Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
+Single-context: `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
