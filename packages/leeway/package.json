@@ -1,6 +1,6 @@
 {
     "name": "leeway",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Per-folder dev port ranges so parallel worktrees and agents never fight over ports",
     "license": "MIT",
     "repository": {
