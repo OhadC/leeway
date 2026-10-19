@@ -66,13 +66,13 @@ describe("devPorts default environment", () => {
     });
 
     it("reads ports the vite plugin injected", () => {
-        vi.stubGlobal("__LEEWAY_ENV__", { PORT_API: 21001 });
+        vi.stubGlobal("LEEWAY_ENV", { PORT_API: 21001 });
 
         expect(devPorts(config)).toEqual({ PORT_WEB: 5173, PORT_API: 21001 });
     });
 
     it("lets process.env win over injected ports", () => {
-        vi.stubGlobal("__LEEWAY_ENV__", { PORT_WEB: 21001 });
+        vi.stubGlobal("LEEWAY_ENV", { PORT_WEB: 21001 });
         vi.stubEnv("PORT_WEB", "21002");
 
         expect(devPorts(config).PORT_WEB).toBe(21002);

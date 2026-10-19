@@ -22,7 +22,7 @@ export function leeway<T extends LeewayConfig = LeewayConfig>(options: LeewayVit
             return {
                 server: { port: portNamed(ports, options.port), strictPort: true },
                 preview: { port: portNamed(ports, options.preview ?? options.port), strictPort: true },
-                define: { __LEEWAY_ENV__: JSON.stringify(ports) },
+                define: { LEEWAY_ENV: JSON.stringify(ports) },
             };
         },
     };

@@ -107,6 +107,15 @@ describe("leeway <command>", () => {
         expect(result.status).toBe(0);
     });
 
+    it("hands {{LEEWAY_ENV}} to the command as one argument holding every port as JSON", () => {
+        const { dir, home } = temporaryFolder();
+
+        const result = LeewayCli.run(["--default", "node", "-e", "console.log(process.argv[1])", "LEEWAY_ENV={{LEEWAY_ENV}}"], dir, home);
+
+        expect(result.stdout).toBe(`LEEWAY_ENV=${JSON.stringify({ PORT_WEB: 5173, PORT_API: 3001 })}\n`);
+        expect(result.status).toBe(0);
+    });
+
     it("--default puts each default port in place of {{NAME}} and in the env, ignoring the environment and the agent guard", () => {
         const { dir, home } = temporaryFolder();
         fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify({ ...LeewayCli.config, agentGuard: true }));

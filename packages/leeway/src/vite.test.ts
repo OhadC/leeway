@@ -51,7 +51,7 @@ describe("leeway vite plugin", () => {
 
         const config = configOf(leeway({ config: leewayConfig, port: "PORT_WEB" }), {}, serve);
 
-        expect(config.define).toEqual({ __LEEWAY_ENV__: '{"PORT_WEB":5173,"PORT_API":24556}' });
+        expect(config.define).toEqual({ LEEWAY_ENV: '{"PORT_WEB":5173,"PORT_API":24556}' });
     });
 
     it("keeps the ports out of a build", () => {
@@ -70,7 +70,7 @@ describe("leeway vite plugin", () => {
     it("injects the ports into a build when always asked to", () => {
         const config = configOf(leeway({ config: leewayConfig, port: "PORT_WEB", alwaysInject: true }), {}, build);
 
-        expect(config.define).toEqual({ __LEEWAY_ENV__: '{"PORT_WEB":5173,"PORT_API":3001}' });
+        expect(config.define).toEqual({ LEEWAY_ENV: '{"PORT_WEB":5173,"PORT_API":3001}' });
     });
 
     it("finds the config above vite's root when none is given", () => {
@@ -82,7 +82,7 @@ describe("leeway vite plugin", () => {
         const config = configOf(leeway({ port: "PORT_DOCS" }), { root: appRoot }, serve);
 
         expect(config.server).toEqual({ port: 4400, strictPort: true });
-        expect(config.define).toEqual({ __LEEWAY_ENV__: '{"PORT_DOCS":4400}' });
+        expect(config.define).toEqual({ LEEWAY_ENV: '{"PORT_DOCS":4400}' });
     });
 
     it.each([

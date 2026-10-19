@@ -115,6 +115,15 @@ describe("ConfigFile.find", () => {
         );
     });
 
+    it("refuses LEEWAY_ENV as a port name, which the {{LEEWAY_ENV}} placeholder owns", () => {
+        const folder = tempFolder();
+        writeConfig(folder, { ports: { LEEWAY_ENV: { port: 3000 } } });
+
+        expect(() => ConfigFile.find(folder)).toThrowError(
+            `leeway: LEEWAY_ENV in ${path.join(folder, "leeway.json")} is reserved for the {{LEEWAY_ENV}} placeholder`,
+        );
+    });
+
     it("accepts the port range edges", () => {
         const folder = tempFolder();
         writeConfig(folder, { ports: { LOW: { port: 1 }, HIGH: { port: 65535 } } });

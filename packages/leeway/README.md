@@ -89,8 +89,8 @@ server.listen(PORT_API);
 ```
 
 `devPorts(config)` returns one port per catalogue entry: the entry's environment variable if it is set to a port, else the default
-port. It is browser-safe: in the browser it reads the ports the vite plugin injected (see below), and falls back to default ports when
-there are none.
+port. It is browser-safe: in the browser it reads the ports injected as `LEEWAY_ENV`, by the vite plugin or by `{{LEEWAY_ENV}}`
+(see [Other bundlers](#other-bundlers)), and falls back to default ports when there are none.
 
 ### Agent guard
 
@@ -122,8 +122,21 @@ The plugin:
 - sets `server.port` and `preview.port` from `devPorts`, with `strictPort: true`, so a taken port fails loudly instead of drifting to
   port+1. `vite preview` uses the `port` name too; name another with `preview` for an app that runs its preview beside its dev server
   (`leeway({ config, port: "PORT_WEB", preview: "PORT_PREVIEW" })`);
-- on `vite serve`, defines `__LEEWAY_ENV__` with every catalogue port, so `devPorts(config)` in browser code sees the same ports as the
+- on `vite serve`, defines `LEEWAY_ENV` with every catalogue port, so `devPorts(config)` in browser code sees the same ports as the
   server. Builds keep default ports unless you pass `alwaysInject: true`.
+
+## Other bundlers
+
+A bundler with a define option gets the same browser ports from the `{{LEEWAY_ENV}}` placeholder, which becomes every catalogue port as
+JSON. Angular CLI, for example:
+
+```json
+{
+    "scripts": {
+        "serve": "leeway ng serve --port {{PORT_WEB}} --define LEEWAY_ENV={{LEEWAY_ENV}}"
+    }
+}
+```
 
 ## CLI
 
@@ -157,6 +170,8 @@ folder still claims its own range, and an explicit `--default` or `--inherit` ke
 ```
 
 - `{{NAME}}` anywhere in the command becomes that port. A `{{NAME}}` that is not in the catalogue fails before anything is claimed or run.
+- `{{LEEWAY_ENV}}` becomes every catalogue port as JSON, `{"PORT_WEB":21000,"PORT_API":21001}`, so `LEEWAY_ENV` can't be a port name.
+  It needs the command as several arguments, which leeway quotes; in a one-argument shell line it fails.
 - `env`, `list` and `kill` are leeway's own commands, and a flag before the command is leeway's: an unknown one fails with the usage. To
   run a command with one of those names, or starting with `-`, put `--` first: `leeway -- kill ...`.
 - One argument is a shell line, run as-is: `leeway "vite build && vite preview"`. Several arguments are an argv: each is quoted for the

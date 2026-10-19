@@ -56,7 +56,7 @@ How a leeway call picks its ports: claim the folder's range, take the default po
 _Avoid_: flag, strategy, setting
 
 **Placeholder**:
-A port name written as `{{NAME}}` in a command, standing for that port.
+`{{NAME}}` in a command: a port name stands for that port, and `LEEWAY_ENV` for every port as JSON.
 _Avoid_: template, variable, token
 
 ### Processes

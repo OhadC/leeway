@@ -9,7 +9,7 @@ export type LeewayEnv = Record<string, string | number | undefined>;
 
 export type PortsOf<T extends LeewayConfig> = Record<keyof T["ports"] & string, number>;
 
-declare const __LEEWAY_ENV__: Record<string, number> | undefined;
+declare const LEEWAY_ENV: Record<string, number> | undefined;
 
 const AGENT_MARKERS = ["CLAUDECODE", "GEMINI_CLI", "CURSOR_AGENT", "AI_AGENT"];
 
@@ -34,7 +34,7 @@ function isAgentShell(env: LeewayEnv): boolean {
 }
 
 function currentEnv(): LeewayEnv {
-    const injected = typeof __LEEWAY_ENV__ === "undefined" ? {} : __LEEWAY_ENV__;
+    const injected = typeof LEEWAY_ENV === "undefined" ? {} : LEEWAY_ENV;
     const processEnv = typeof process === "undefined" ? {} : process.env;
 
     return { ...injected, ...processEnv };

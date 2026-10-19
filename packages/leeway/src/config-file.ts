@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { LeewayConfig } from "./dev-ports.ts";
+import { ExecCommand } from "./exec-command.ts";
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -68,6 +69,10 @@ export class ConfigFile {
                 throw new Error(
                     `leeway: ${JSON.stringify(name)} in ${file} is not an environment variable name (letters, digits, _; not starting with a digit)`,
                 );
+            }
+
+            if (`{{${name}}}` === ExecCommand.ALL_PORTS_PLACEHOLDER) {
+                throw new Error(`leeway: ${name} in ${file} is reserved for the ${ExecCommand.ALL_PORTS_PLACEHOLDER} placeholder`);
             }
 
             if (!isPort((entry as { port?: unknown } | null)?.port)) {

@@ -52,6 +52,10 @@ describe("ExecCommand.unknownPlaceholders", () => {
         ).toEqual(["PORT_WBE", "X"]);
     });
 
+    it("knows {{LEEWAY_ENV}} without a catalogue entry", () => {
+        expect(ExecCommand.unknownPlaceholders(["ng", "--define", "LEEWAY_ENV={{LEEWAY_ENV}}"], ["PORT_WEB"])).toEqual([]);
+    });
+
     it("ignores braces that are not a {{NAME}} placeholder", () => {
         expect(ExecCommand.unknownPlaceholders(["docker ps --format '{{.Names}}' {PORT_X} {{1X}}"], ["PORT_WEB"])).toEqual([]);
     });
@@ -65,6 +69,23 @@ describe("ExecCommand.commandLine", () => {
                 PORT_API: 21001,
             }),
         ).toBe("vite --port 21000 --proxy http://localhost:21001/21001");
+    });
+
+    it("puts every port as JSON in place of {{LEEWAY_ENV}}, quoted like any other argument", () => {
+        const ports = { PORT_WEB: 21000, PORT_API: 21001 };
+
+        expect(ExecCommand.commandLine(["ng", "--define", "LEEWAY_ENV={{LEEWAY_ENV}}"], ports, "linux")).toBe(
+            `ng --define 'LEEWAY_ENV={"PORT_WEB":21000,"PORT_API":21001}'`,
+        );
+        expect(ExecCommand.commandLine(["ng", "--define", "LEEWAY_ENV={{LEEWAY_ENV}}"], ports, "win32")).toBe(
+            String.raw`ng --define ^"LEEWAY_ENV={\^"PORT_WEB\^":21000^,\^"PORT_API\^":21001}^"`,
+        );
+    });
+
+    it("refuses {{LEEWAY_ENV}} in a single-argument shell line, which it cannot quote", () => {
+        expect(() => ExecCommand.commandLine(["ng --define LEEWAY_ENV={{LEEWAY_ENV}}"], { PORT_WEB: 21000 })).toThrowError(
+            "leeway: {{LEEWAY_ENV}} needs the command as several arguments, not one shell line, so leeway can quote it",
+        );
     });
 
     it("takes a single argument as a shell line, as it is apart from the ports", () => {

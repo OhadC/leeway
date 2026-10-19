@@ -12,7 +12,7 @@ import { RangeRegistry } from "./range-registry.ts";
 import { RunWithPorts } from "./run-with-ports.ts";
 
 const USAGE = [
-    "usage: leeway [--default | --inherit] [--] <command>   run <command> with this folder's range as env vars; {{NAME}} in <command> becomes its port",
+    "usage: leeway [--default | --inherit] [--] <command>   run <command> with this folder's range as env vars; {{NAME}} in <command> becomes its port, {{LEEWAY_ENV}} every port as JSON",
     "                                                       --default: the default ports; --inherit: the ports in the environment, else the default ports",
     "       leeway env --export                             claim this folder's range and print it as export lines",
     "       leeway list [--json]                            show every range, the pids listening in it, and orphan listeners in the pool",

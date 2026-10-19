@@ -17,6 +17,8 @@ const PLACEHOLDER = /\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g;
 const CMD_METACHARACTERS = /([()\][%!^"`<>&|;, *?])/g;
 
 export class ExecCommand {
+    static readonly ALL_PORTS_PLACEHOLDER = "{{LEEWAY_ENV}}";
+
     static requestOf(args: readonly string[]): ExecRequest | undefined {
         const flagMode = MODE_FLAGS.get(args[0]);
         const rest = flagMode ? args.slice(1) : args;
@@ -31,15 +33,27 @@ export class ExecCommand {
     }
 
     static unknownPlaceholders(command: readonly string[], names: readonly string[]): string[] {
-        const found = command.flatMap(arg => [...arg.matchAll(PLACEHOLDER)].map(match => match[1] ?? ""));
+        const found = command.flatMap(arg =>
+            [...arg.matchAll(PLACEHOLDER)].filter(match => match[0] !== ExecCommand.ALL_PORTS_PLACEHOLDER).map(match => match[1] ?? ""),
+        );
 
         return [...new Set(found)].filter(name => !names.includes(name));
     }
 
     static commandLine(command: readonly string[], ports: Record<string, number>, platform: NodeJS.Platform = process.platform): string {
-        const args = command.map(arg => withPorts(arg, ports));
+        if (command.length > 1) {
+            return command.map(arg => ExecCommand.quoted(withPorts(arg, ports), platform)).join(" ");
+        }
 
-        return args.length === 1 ? (args[0] ?? "") : args.map(arg => ExecCommand.quoted(arg, platform)).join(" ");
+        const line = command[0] ?? "";
+
+        if (line.includes(ExecCommand.ALL_PORTS_PLACEHOLDER)) {
+            throw new Error(
+                `leeway: ${ExecCommand.ALL_PORTS_PLACEHOLDER} needs the command as several arguments, not one shell line, so leeway can quote it`,
+            );
+        }
+
+        return withPorts(line, ports);
     }
 
     private static quoted(arg: string, platform: NodeJS.Platform): string {
@@ -58,5 +72,7 @@ export class ExecCommand {
 }
 
 function withPorts(arg: string, ports: Record<string, number>): string {
-    return arg.replace(PLACEHOLDER, (placeholder, name: string) => String(ports[name] ?? placeholder));
+    return arg.replace(PLACEHOLDER, (placeholder, name: string) =>
+        placeholder === ExecCommand.ALL_PORTS_PLACEHOLDER ? JSON.stringify(ports) : String(ports[name] ?? placeholder),
+    );
 }

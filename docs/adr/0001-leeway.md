@@ -73,7 +73,9 @@ an explicit `--default` or `--inherit` keeps its meaning, a call for another fol
 `LEEWAY_FOLDER` or one of the catalogue's ports is claimed as before. `leeway env --export` sets no `LEEWAY_FOLDER`: an agent session's exported range
 is re-checked by the next claim.
 `env`, `list` and `kill` are reserved; `--` runs a command of that name. `{{NAME}}` in the command becomes the port, for tools that take a
-port only as an argument.
+port only as an argument. `{{LEEWAY_ENV}}` becomes every port as JSON, for bundlers without a leeway plugin to define the
+browser's `LEEWAY_ENV` (`--define LEEWAY_ENV={{LEEWAY_ENV}}`); one name for both, so `LEEWAY_ENV` can't be a port name. JSON needs quoting, so it works only in several arguments, which leeway quotes; a one-argument
+shell line with it fails rather than lose its quotes.
 
 **Environment variables are the transport.** They pass through `concurrently`, `tsx`, package scripts and shells to every child process
 with no integration. `leeway` runs the command through the system shell: one argument is a shell line, several are an argv quoted for
@@ -82,8 +84,8 @@ it; on Windows, which has no process groups to signal, Ctrl+C, Ctrl+Break and co
 
 **Browser and vite.** `devPorts` is browser-safe. `leeway/vite` sets `server.port` and `preview.port` with `strictPort`, so a taken port
 fails instead of drifting. `preview.port` uses the dev server's port name unless `preview` names another: left alone, vite previews on
-4173 without `strictPort`, so two worktrees' previews collide or drift. On `serve` the plugin defines `__LEEWAY_ENV__` so browser code
-sees the server's ports. Builds keep default ports unless `alwaysInject` is set, so dev ports never leak into a production bundle.
+4173 without `strictPort`, so two worktrees' previews collide or drift. On `serve` the plugin defines `LEEWAY_ENV` so browser code
+sees the server's ports; other bundlers get the same from `{{LEEWAY_ENV}}`. Builds keep default ports unless `alwaysInject` is set, so dev ports never leak into a production bundle.
 
 **Agents.** Agents forget rules, so a repo can make forgetting loud. With `"agentGuard": true`, `devPorts` throws in an agent shell (`CLAUDECODE`, `GEMINI_CLI`,
 `CURSOR_AGENT`, `AI_AGENT`) when none of the catalogue's variables are set, except under `VITEST`, where app modules read ports at import
