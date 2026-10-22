@@ -32,7 +32,7 @@ Use LSP, not grep: `ToolSearch select:LSP`, then `workspaceSymbol` with the symb
 
 ### Issue tracker
 
-Local markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+GitHub Issues on `OhadC/leeway` via `gh`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
