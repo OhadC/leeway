@@ -19,6 +19,6 @@ Use LSP, not grep: `ToolSearch select:LSP`, then `workspaceSymbol` with the symb
 
 ## Agent skills
 
-- Issue tracker: local markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+- Issue tracker: GitHub Issues on `OhadC/leeway` via `gh`. See `docs/agents/issue-tracker.md`.
 - Triage labels: the default five. See `docs/agents/triage-labels.md`.
 - Domain docs: single-context, `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
