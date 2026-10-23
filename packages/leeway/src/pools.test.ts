@@ -20,3 +20,14 @@ describe("Pools.holds", () => {
         ]);
     });
 });
+
+describe("Pools.problem", () => {
+    it.each([
+        [[{ start: 3999, end: 3000 }], "3999-3000 starts after it ends"],
+        [[{ start: 0, end: 3999 }], "0-3999 is not a pool of ports 1-65535"],
+        [[{ start: 65536, end: 3000 }], "65536-3000 is not a pool of ports 1-65535"],
+        [["3000-3999"], '"3000-3999" is not a pool of ports 1-65535'],
+    ])("names what is wrong with %j", (pools, problem) => {
+        expect(Pools.problem(pools)).toBe(problem);
+    });
+});

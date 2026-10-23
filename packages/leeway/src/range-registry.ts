@@ -299,17 +299,17 @@ export class RangeRegistry {
     }
 
     private static readableRange(value: unknown): StoredRange | undefined {
-        if (!isObject(value)) {
+        const span = Pools.readable(value);
+
+        if (!span || !isObject(value)) {
             return undefined;
         }
 
-        const { start, end, ports } = value;
-
-        if (!isPortNumber(start) || !isPortNumber(end) || start > end) {
-            return undefined;
-        }
-
-        const hasReadablePorts = isObject(ports) && Object.values(ports).every(port => isPortNumber(port) && port >= start && port <= end);
+        const { start, end } = span;
+        const { ports } = value;
+        const hasReadablePorts =
+            isObject(ports) &&
+            Object.values(ports).every(port => typeof port === "number" && Number.isInteger(port) && port >= start && port <= end);
 
         return { start, end, ports: hasReadablePorts ? (ports as Record<string, number>) : {} };
     }
@@ -372,10 +372,6 @@ function parseJson(text: string): unknown {
 
 function isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isPortNumber(value: unknown): value is number {
-    return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 65535;
 }
 
 function bindErrorCode(port: number, host: string): Promise<string | undefined> {

@@ -22,25 +22,28 @@ export class Pools {
             return "at least one pool is needed, written start-end";
         }
 
-        const unreadable = pools.find(pool => !isObject(pool) || !isPortNumber(pool.start) || !isPortNumber(pool.end));
+        const readable = pools.flatMap(pool => Pools.readable(pool) ?? []);
 
-        if (unreadable !== undefined) {
-            return `${Pools.textOfUnreadable(unreadable)} is not a pool of ports 1-65535`;
+        if (readable.length < pools.length) {
+            return Pools.rejection(pools.find(pool => !Pools.readable(pool)));
         }
 
-        const readable = pools as Pool[];
-        const reversed = readable.find(pool => pool.start > pool.end);
-
-        if (reversed) {
-            return `${Pools.textOfPool(reversed)} starts after it ends`;
-        }
-
-        const byStart = [...readable].sort((left, right) => left.start - right.start);
+        const byStart = readable.sort((left, right) => left.start - right.start);
         const overlapping = byStart.findIndex((pool, index) => index > 0 && pool.start <= byStart[index - 1]!.end);
 
         return overlapping === -1
             ? undefined
             : `${Pools.textOfPool(byStart[overlapping - 1]!)} and ${Pools.textOfPool(byStart[overlapping]!)} overlap`;
+    }
+
+    static readable(value: unknown): Pool | undefined {
+        if (!isObject(value)) {
+            return undefined;
+        }
+
+        const { start, end } = value;
+
+        return isPortNumber(start) && isPortNumber(end) && start <= end ? { start, end } : undefined;
     }
 
     static holds(pools: Pool[], start: number, end = start): boolean {
@@ -69,6 +72,12 @@ export class Pools {
 
     private static textOfPool({ start, end }: Pool): string {
         return `${start}-${end}`;
+    }
+
+    private static rejection(value: unknown): string {
+        const reversed = isObject(value) && Pools.readable({ start: value.end, end: value.start }) !== undefined;
+
+        return `${Pools.textOfUnreadable(value)} ${reversed ? "starts after it ends" : "is not a pool of ports 1-65535"}`;
     }
 
     private static textOfUnreadable(value: unknown): string {
