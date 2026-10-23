@@ -33,19 +33,28 @@ Its `ports` are the catalogue: the key is the environment variable the port trav
 the nearest wins; the folder holding it owns the range, so every worktree, or a sub-package with its own `leeway.json`, claims separately.
 Every consumer resolves `env[NAME] ?? default` through `devPorts(config)`; no literal port is left in configs.
 
-**Ranges in a machine-wide registry.** A folder's range is recorded in `~/.leeway/ranges.json`: a format `version` and a map from absolute
-folder path (lowercased on Windows) to `{ start, end, ports }`, with `ports` naming each port. A range is exactly as wide as its catalogue,
-and any tool can list and kill any repo's ports by reading entries, never by computing them. The registry is global rather than per-repo so
-every repo shares one allocator and one listing.
+**Ranges in a machine-wide registry.** A folder's range is recorded in `~/.leeway/ranges.json`: a format `version`, the machine's `pools`
+when its owner set any, and a map from absolute folder path (lowercased on Windows) to `{ start, end, ports }`, with `ports` naming each
+port. A range is exactly as wide as its catalogue, and any tool can list and kill any repo's ports by reading entries, never by computing
+them. The registry is global rather than per-repo so every repo shares one allocator and one listing.
 
-**Pool 21000-29999.** All ranges come from this pool, so "is this port leeway's?" is a range check. It is above the low ports products use
-and clear of the earlier `dev-ports` layouts (20020-21999), so old and new tooling run side by side. It is not configurable. A stored range
-outside the pool is data the code doesn't understand, so it is never kept, listed or killed.
+**Machine pools.** A claim places every range inside one of the machine's pools. Some machines can't use just any ports: a firewall allows
+only certain ones, or ports are forwarded into a container or VM. So the machine's owner sets the pools with `leeway pools set <start-end>...`,
+in order of preference, and `leeway pools reset` goes back to the default pool, 21000-29999. The pools are the machine's, not a repo's:
+they sit in the registry as a top-level `pools` list of `{ start, end }` beside `folders`, so every repo shares them, and a repo can't
+claim ports the machine doesn't allow. The default pool is above the low ports products use and clear of the earlier `dev-ports` layouts
+(20020-21999), so old and new tooling run side by side. A range never spans two pools, even adjacent ones, so every range sits inside a
+pool the owner set. Pools that are not integers 1-65535, a start above its end, no pools or overlapping pools are refused by
+`pools set` before anything is written, and the same pools read back from the registry make claims fail with a message to fix them rather
+than guess. Setting or resetting the pools moves and warns about no range: a range outside every pool still holds its ports and is listed
+and killed, but its folder's next claim moves it into a pool, with the usual warning. Older leeways ignore `pools` and claim in the default
+pool ([0002](0002-forward-compatible-registry.md)).
 
-**Claiming.** Under a lock, a claim keeps the folder's range when it overlaps no other stored range and its ports pass the port test,
-without checking which folders still exist. Otherwise it drops entries whose folder is gone, tries the folder's current start first, so a grown catalogue
-stays put when the next ports are free, then every gap from low to high. It takes the first candidate that
-overlaps no living entry and whose ports all pass the port test. When the range moves, the CLI warns on stderr.
+**Claiming.** Under a lock, a claim keeps the folder's range when it sits inside one pool, overlaps no other stored range and its ports
+pass the port test, without checking which folders still exist. Otherwise it drops entries whose folder is gone, tries the folder's
+current start first, so a grown catalogue stays put when the next ports are free, then each pool's gaps from low to high, pools in the
+order they were set. It takes the first candidate that sits inside one pool, overlaps no living entry and whose ports all pass the port
+test. When none fits, the claim fails naming every pool. When the range moves, the CLI warns on stderr.
 
 **Port test.** It binds `127.0.0.1`, `::1`, `0.0.0.0` and `::`, because on Windows a wildcard bind succeeds while something listens on a
 loopback address (vite on `::1`). A missing address family is skipped. The result is free, in-use or unavailable (reserved, access
@@ -57,9 +66,9 @@ prepared directory into place so it is never seen empty while held. Waiters retr
 never blocks later claims, and the directory is only removed while empty, so breaking a stale lock or a late release never removes another
 claim's lock. The registry is written atomically (temp file, rename).
 
-**Unknown data.** Entries the code doesn't understand are passed through untouched and don't occupy a range, so one leeway version never
-erases another's claims. A registry with a newer `version` refuses claims ("update leeway"); one that isn't a registry refuses claims rather
-than being overwritten.
+**Unknown data.** The registry is forward-compatible, as [0002](0002-forward-compatible-registry.md) records: no leeway refuses it
+because of its `version`, every write keeps data it doesn't understand, and every readable range holds its ports. One that isn't a
+registry refuses claims rather than being overwritten.
 
 **Claiming is the default.** `leeway <command>` claims the folder's range and runs the command on it, ignoring ports already in the
 environment: a claim is cheap and repeatable, and an inherited environment can belong to another folder. `leeway --default <command>` runs
@@ -72,7 +81,7 @@ that same folder runs on the ports it was handed, silently, so composed scripts 
 an explicit `--default` or `--inherit` keeps its meaning, a call for another folder claims its own range, and an environment that lacks
 `LEEWAY_FOLDER` or one of the catalogue's ports is claimed as before. `leeway env --export` sets no `LEEWAY_FOLDER`: an agent session's exported range
 is re-checked by the next claim.
-`env`, `list` and `kill` are reserved; `--` runs a command of that name. `{{NAME}}` in the command becomes the port, for tools that take a
+`env`, `list`, `kill` and `pools` are reserved; `--` runs a command of that name. `{{NAME}}` in the command becomes the port, for tools that take a
 port only as an argument. `{{LEEWAY_ENV}}` becomes every port as JSON, for bundlers without a leeway plugin to define the
 browser's `LEEWAY_ENV` (`--define LEEWAY_ENV={{LEEWAY_ENV}}`); one name for both, so `LEEWAY_ENV` can't be a port name. JSON needs quoting, so it works only in several arguments, which leeway quotes; a one-argument
 shell line with it fails rather than lose its quotes.
@@ -97,10 +106,10 @@ not just package scripts. Other agents are
 told to run `leeway <command>`. Codex has no reliable marker, and Copilot and Aider document none, so for them the guard
 can't fire.
 
-**Listing and killing scan the OS.** `leeway list` shows every range from every repo with the pid on each port, plus orphans: pool listeners
+**Listing and killing scan the OS.** `leeway list` shows every range from every repo with the pid on each port, plus orphans: listeners in any pool
 outside every living range. A registry-only listing can't tell a running server from a dead registration, which is most of the question.
-`leeway kill [<port>]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in the pool, just
-the listeners on it; it never kills outside the pool. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
+`leeway kill [<port>]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in any
+pool, just the listeners on it; a port outside every range and every pool is refused. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
 above it and that run's tree, found by walking parent pids in a fresh process table and recognising the run by its command line
 (`leeway/dist/cli.mjs`). Killing only the listener left watchers (`tsx watch`) alive to restart it on the next file change. An orphan's run
 is spared: it can be a moved range's old server under a run that also serves the current range. Recording each run's pid in the registry was
@@ -111,7 +120,7 @@ scan uses `netstat -ano` on Windows, `ss` on Linux and `lsof` on macOS, behind a
 On Windows a TCP row whose foreign port is 0 is a listener, so the localized state column is never read; PowerShell's
 `Get-NetTCPConnection` was rejected for taking seconds to start.
 
-**Rejected scope.** No `leeway init`: the catalogue is a few lines written by hand. No configurable pool. No pool compaction.
+**Rejected scope.** No `leeway init`: the catalogue is a few lines written by hand. No pool compaction.
 
 ## Consequences
 
@@ -121,7 +130,8 @@ On Windows a TCP row whose foreign port is 0 is a listener, so the localized sta
 - Adding a server is one catalogue entry.
 - A freed range whose orphaned servers still listen, or a port held by an unrelated process or reserved by the OS, is skipped at claim time.
 - A port can still be taken between the claim and the server binding it; `strictPort` and bind errors make that loud.
-- The pool is never compacted and can fragment; a full pool fails with a message to remove unused folders' ranges.
+- Pools are never compacted and can fragment; when no pool has room, the claim fails naming every pool, with a message to remove unused
+  folders' ranges.
 - A hard kill of `leeway` itself skips its cleanup and can leave the command tree running on any OS; `leeway kill` recovers it.
 - Anything spawned with a scrubbed environment loses its ports, and in an agent shell of a guarded repo hits the guard.
 - Reading a vite config no longer shows the port.

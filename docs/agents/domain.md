@@ -17,7 +17,8 @@ Single-context:
 /
 ├── GLOSSARY.md
 ├── docs/adr/
-│   └── 0001-leeway.md
+│   ├── 0001-leeway.md
+│   └── 0002-forward-compatible-registry.md
 └── packages/leeway/
 ```
 

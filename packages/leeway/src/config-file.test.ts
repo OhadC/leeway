@@ -37,6 +37,20 @@ describe("ConfigFile.find", () => {
         expect(ConfigFile.find(folder).config.agentGuard).toBe(true);
     });
 
+    it("accepts a $schema pointing at the shipped schema", () => {
+        const folder = tempFolder();
+        writeConfig(folder, { $schema: "./node_modules/leeway/schema.json", ports: { PORT_APP: { port: 3000 } } });
+
+        expect(ConfigFile.find(folder).config.ports).toEqual({ PORT_APP: { port: 3000 } });
+    });
+
+    it("refuses a $schema that is not a string", () => {
+        const folder = tempFolder();
+        writeConfig(folder, { $schema: 5, ports: { PORT_APP: { port: 3000 } } });
+
+        expect(() => ConfigFile.find(folder)).toThrowError(`leeway: "$schema" in ${path.join(folder, "leeway.json")} must be a string`);
+    });
+
     it("refuses, naming the starting folder, when no folder above it has a config", () => {
         const folder = tempFolder();
 
