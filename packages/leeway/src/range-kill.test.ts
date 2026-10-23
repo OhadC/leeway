@@ -73,7 +73,7 @@ describe("RangeKill.planOfPort", () => {
 
     it("refuses a port outside every range and outside the pool", () => {
         expect(() => RangeKill.planOfPort([APP], LISTENERS, 3000)).toThrow(
-            "leeway: port 3000 is in no range and outside the pool 21000-29999; leeway only kills there",
+            "leeway: port 3000 is in no range and outside the pool 21000-29999; leeway only kills in ranges and the pool",
         );
     });
 });

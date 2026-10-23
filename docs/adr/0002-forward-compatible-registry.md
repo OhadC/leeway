@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-10-23, from leeway 0.3. Replaces the "Unknown data" rules of [0001](0001-leeway.md).
+Accepted, 2026-10-23, from leeway 0.3. The "Unknown data" paragraph of [0001](0001-leeway.md) points here for the full contract.
 
 ## Context
 

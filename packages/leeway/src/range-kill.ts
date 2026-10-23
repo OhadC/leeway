@@ -33,7 +33,7 @@ export class RangeKill {
 
         if (!RangeRegistry.isInPool(port)) {
             throw new Error(
-                `leeway: port ${port} is in no range and outside the pool ${RangeRegistry.POOL_START}-${RangeRegistry.POOL_END}; leeway only kills there`,
+                `leeway: port ${port} is in no range and outside the pool ${RangeRegistry.POOL_START}-${RangeRegistry.POOL_END}; leeway only kills in ranges and the pool`,
             );
         }
 

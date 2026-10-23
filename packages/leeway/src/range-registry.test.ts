@@ -63,7 +63,7 @@ describe("RangeRegistry.claim", () => {
         expect(entry).toEqual({ folder: "/repo", start: 21002, end: 21003, ports: { PORT_A: 21002, PORT_B: 21003 } });
     });
 
-    it("moves a folder whose stored range lies outside the pool into the pool", async () => {
+    it("moves a folder whose range lies outside the pool into the pool", async () => {
         const registryPath = createRegistryPath({
             version: 1,
             folders: { "/repo": { start: 5000, end: 5001, ports: { PORT_A: 5000, PORT_B: 5001 } } },
@@ -308,6 +308,15 @@ describe("RangeRegistry.claim", () => {
         expect(readRegistry(registryPath).version).toBe(version);
     });
 
+    it("claims from a registry without a version and writes none", async () => {
+        const registryPath = createRegistryPath({ folders: {} });
+
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A"]);
+
+        expect(entry).toEqual({ folder: "/repo", start: 21000, end: 21000, ports: { PORT_A: 21000 } });
+        expect(readRegistry(registryPath)).not.toHaveProperty("version");
+    });
+
     it("keeps top-level registry data it does not understand", async () => {
         const registryPath = createRegistryPath({ version: 1, pools: { web: [30000, 30999] }, folders: {} });
 
@@ -406,7 +415,9 @@ describe("RangeRegistry.claim lock", () => {
     it("releases the lock after a failed claim", async () => {
         const registryPath = createRegistryPath([]);
 
-        await expect(claim(registryPath, "/repo", ["PORT_A"])).rejects.toThrow(registryPath);
+        await expect(claim(registryPath, "/repo", ["PORT_A"])).rejects.toThrow(
+            `leeway: ${registryPath} is not a valid range registry; fix or delete it`,
+        );
         fs.writeFileSync(registryPath, JSON.stringify({ version: 1, folders: {} }));
         expect(await claim(registryPath, "/repo", ["PORT_A"], { now: () => Date.now() - 60_000 })).toMatchObject({
             entry: { start: 21000 },

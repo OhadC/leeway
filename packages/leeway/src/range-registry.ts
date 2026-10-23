@@ -83,7 +83,7 @@ export class RangeRegistry {
         pathExists: (candidate: string) => boolean = fs.existsSync,
     ): RangeEntry[] {
         return Object.entries(RangeRegistry.read(registryPath).folders).flatMap(([folder, value]) => {
-            const range = RangeRegistry.storedRange(value);
+            const range = RangeRegistry.readableRange(value);
 
             return range && pathExists(folder) ? [{ folder, ...range }] : [];
         });
@@ -122,12 +122,12 @@ export class RangeRegistry {
         const entries = Object.entries(registry.folders);
         const isOwn = ([key]: [string, unknown]) => RangeRegistry.folderKey(key, platform) === folder;
         const own = entries.filter(isOwn);
-        const [current] = RangeRegistry.storedRanges(own);
+        const [current] = RangeRegistry.readableRanges(own);
         const ownKeys = Object.fromEntries(own.flatMap(([, value]) => (isObject(value) ? Object.entries(value) : [])));
         const others = entries.filter(pair => !isOwn(pair));
-        const kept = current && (await RangeRegistry.keep(current, names, RangeRegistry.storedRanges(others), testPort));
+        const kept = current && (await RangeRegistry.keep(current, names, RangeRegistry.readableRanges(others), testPort));
         const living = kept ? others : others.filter(([key]) => pathExists(key));
-        const range = kept ?? (await RangeRegistry.place(current, RangeRegistry.storedRanges(living), names, testPort));
+        const range = kept ?? (await RangeRegistry.place(current, RangeRegistry.readableRanges(living), names, testPort));
 
         if (!range) {
             throw new Error(
@@ -252,11 +252,11 @@ export class RangeRegistry {
         return { ...registry, folders: registry.folders };
     }
 
-    private static storedRanges(pairs: [string, unknown][]): StoredRange[] {
-        return pairs.flatMap(([, value]) => RangeRegistry.storedRange(value) ?? []);
+    private static readableRanges(pairs: [string, unknown][]): StoredRange[] {
+        return pairs.flatMap(([, value]) => RangeRegistry.readableRange(value) ?? []);
     }
 
-    private static storedRange(value: unknown): StoredRange | undefined {
+    private static readableRange(value: unknown): StoredRange | undefined {
         if (!isObject(value)) {
             return undefined;
         }
@@ -267,9 +267,9 @@ export class RangeRegistry {
             return undefined;
         }
 
-        const isUsable = isObject(ports) && Object.values(ports).every(port => isPortNumber(port) && port >= start && port <= end);
+        const hasReadablePorts = isObject(ports) && Object.values(ports).every(port => isPortNumber(port) && port >= start && port <= end);
 
-        return { start, end, ports: isUsable ? (ports as Record<string, number>) : {} };
+        return { start, end, ports: hasReadablePorts ? (ports as Record<string, number>) : {} };
     }
 
     private static async firstBlockedPort(
@@ -332,7 +332,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isPortNumber(value: unknown): value is number {
-    return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 65535;
+    return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 65535;
 }
 
 function bindErrorCode(port: number, host: string): Promise<string | undefined> {

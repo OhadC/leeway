@@ -38,9 +38,9 @@ folder path (lowercased on Windows) to `{ start, end, ports }`, with `ports` nam
 and any tool can list and kill any repo's ports by reading entries, never by computing them. The registry is global rather than per-repo so
 every repo shares one allocator and one listing.
 
-**Pool 21000-29999.** All ranges come from this pool, so "is this port leeway's?" is a range check. It is above the low ports products use
-and clear of the earlier `dev-ports` layouts (20020-21999), so old and new tooling run side by side. It is not configurable. A stored range
-outside the pool still holds its ports and is listed and killed, but a claim never keeps it: the folder moves into the pool.
+**Pool 21000-29999.** A claim places every range in this pool, so "is this port leeway's?" is a check for a living range holding it, else
+for the pool. It is above the low ports products use and clear of the earlier `dev-ports` layouts (20020-21999), so old and new tooling run
+side by side. It is not configurable. A readable range outside the pool still holds its ports and is listed and killed, but a claim never keeps it: the folder moves into the pool.
 
 **Claiming.** Under a lock, a claim keeps the folder's range when it overlaps no other stored range and its ports pass the port test,
 without checking which folders still exist. Otherwise it drops entries whose folder is gone, tries the folder's current start first, so a grown catalogue
@@ -100,7 +100,7 @@ can't fire.
 **Listing and killing scan the OS.** `leeway list` shows every range from every repo with the pid on each port, plus orphans: pool listeners
 outside every living range. A registry-only listing can't tell a running server from a dead registration, which is most of the question.
 `leeway kill [<port>]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in the pool, just
-the listeners on it; outside every range it never kills outside the pool. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
+the listeners on it; a port outside every range and outside the pool is refused. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
 above it and that run's tree, found by walking parent pids in a fresh process table and recognising the run by its command line
 (`leeway/dist/cli.mjs`). Killing only the listener left watchers (`tsx watch`) alive to restart it on the next file change. An orphan's run
 is spared: it can be a moved range's old server under a run that also serves the current range. Recording each run's pid in the registry was

@@ -30,12 +30,18 @@ The folder holding the nearest config; the unit that owns a range.
 _Avoid_: root, project, worktree, repo
 
 **Pool**:
-The fixed block of ports, 21000-29999, every range comes from; being in the pool is what makes a port leeway's.
+The fixed block of ports, 21000-29999, a claim places every range in. A port is leeway's when it is in a living range or in the pool.
 _Avoid_: port space, allocation range
 
 **Range**:
-A folder's contiguous block of ports from the pool, exactly as wide as its catalogue, one port per port name.
+A folder's contiguous block of ports. A claim places it in the pool, exactly as wide as its catalogue, one port per port name; in the
+registry, a readable range holds its ports wherever it sits and whatever its width.
 _Avoid_: block, slot, allocation
+
+**Readable range**:
+A registry entry's `start`-`end` when both are ports 1-65535 with `start` ≤ `end`, whatever else the entry holds. Only a readable range
+holds ports; any other entry is passed through untouched.
+_Avoid_: usable range
 
 **Registry**:
 The machine-wide record of every folder's range, shared by every repo.
