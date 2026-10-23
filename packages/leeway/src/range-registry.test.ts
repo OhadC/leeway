@@ -38,22 +38,15 @@ describe("RangeRegistry.claim", () => {
         expect(Object.keys(readRegistry(registryPath).folders)).toEqual(["/other", "/repo"]);
     });
 
-    it("keeps a folder's range without checking which other folders still exist", async () => {
-        const registryPath = createRegistryPath({
-            version: 1,
-            folders: {
-                "/other": { start: 21000, end: 21000, ports: { PORT_X: 21000 } },
-                "/repo": { start: 21010, end: 21011, ports: { PORT_A: 21010, PORT_B: 21011 } },
-            },
-        });
-        const checked: string[] = [];
+    it("keeps a deleted folder's range in the registry when the claim keeps its own range", async () => {
+        const deleted = { start: 21000, end: 21000, ports: { PORT_X: 21000 } };
+        const kept = { start: 21010, end: 21011, ports: { PORT_A: 21010, PORT_B: 21011 } };
+        const registryPath = createRegistryPath({ version: 1, folders: { "/deleted": deleted, "/repo": kept } });
 
-        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"], {
-            pathExists: candidate => checked.push(candidate) > 0,
-        });
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"], { pathExists: candidate => candidate !== "/deleted" });
 
-        expect(entry).toEqual({ folder: "/repo", start: 21010, end: 21011, ports: { PORT_A: 21010, PORT_B: 21011 } });
-        expect(checked).toEqual([]);
+        expect(entry).toEqual({ folder: "/repo", ...kept });
+        expect(readRegistry(registryPath).folders).toEqual({ "/deleted": deleted, "/repo": kept });
     });
 
     it("moves a folder whose range overlaps another folder's, as a hand-edited registry can", async () => {
