@@ -1,9 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
+import schema from "../schema.json" with { type: "json" };
 import type { LeewayConfig } from "./dev-ports.ts";
 import { ExecCommand } from "./exec-command.ts";
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const SETTINGS = Object.keys(schema.properties).filter(key => key !== "$schema");
 
 const PORTS_SHAPE = '{ "NAME": { "port": <integer 1-65535> } }';
 
@@ -14,8 +17,6 @@ export type FoundConfig = {
 
 export class ConfigFile {
     static readonly NAME = "leeway.json";
-
-    static readonly SETTINGS: readonly string[] = ["ports", "agentGuard"];
 
     static find(from: string): FoundConfig {
         const folder = ConfigFile.folderOf(from);
@@ -55,8 +56,8 @@ export class ConfigFile {
         }
 
         for (const key of Object.keys(content)) {
-            if (key !== "$schema" && !ConfigFile.SETTINGS.includes(key)) {
-                throw new Error(`leeway: ${JSON.stringify(key)} in ${file} is not a setting (${ConfigFile.SETTINGS.join(", ")})`);
+            if (!Object.hasOwn(schema.properties, key)) {
+                throw new Error(`leeway: ${JSON.stringify(key)} in ${file} is not a setting (${SETTINGS.join(", ")})`);
             }
         }
 

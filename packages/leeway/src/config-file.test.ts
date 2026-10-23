@@ -153,14 +153,6 @@ describe("ConfigFile.find", () => {
     });
 });
 
-describe("ConfigFile.SETTINGS", () => {
-    it("are the shipped schema's top-level properties, besides $schema", () => {
-        const schema = JSON.parse(fs.readFileSync(new URL("../schema.json", import.meta.url), "utf8"));
-
-        expect(Object.keys(schema.properties).toSorted()).toEqual(["$schema", ...ConfigFile.SETTINGS].toSorted());
-    });
-});
-
 function tempFolder(): string {
     const folder = fs.mkdtempSync(path.join(os.tmpdir(), "leeway-config-"));
     folders.push(folder);
