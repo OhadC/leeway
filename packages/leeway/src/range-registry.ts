@@ -51,9 +51,7 @@ type RegistryFile = {
 };
 
 export class RangeRegistry {
-    static readonly POOL_START = 21000;
-    static readonly POOL_END = 29999;
-    static readonly DEFAULT_POOL: Pool = { start: RangeRegistry.POOL_START, end: RangeRegistry.POOL_END };
+    static readonly DEFAULT_POOL: Pool = { start: 21000, end: 29999 };
     private static readonly VERSION = 1;
 
     static defaultPath(home: string): string {
@@ -125,8 +123,12 @@ export class RangeRegistry {
         return entries.find(entry => port >= entry.start && port <= entry.end);
     }
 
-    static isInPool(port: number): boolean {
-        return port >= RangeRegistry.POOL_START && port <= RangeRegistry.POOL_END;
+    static isInPools(port: number, pools: Pool[]): boolean {
+        return pools.some(pool => port >= pool.start && port <= pool.end);
+    }
+
+    static textOfPools(pools: Pool[]): string {
+        return pools.map(textOfPool).join(", ");
     }
 
     private static folderKey(folder: string, platform: NodeJS.Platform): string {
@@ -156,7 +158,7 @@ export class RangeRegistry {
 
         if (!range) {
             throw new Error(
-                `leeway: no room for ${names.length} ports in ${pools.map(textOfPool).join(", ")}; remove unused folders' ranges from ${registryPath} and try again`,
+                `leeway: no room for ${names.length} ports in ${RangeRegistry.textOfPools(pools)}; remove unused folders' ranges from ${registryPath} and try again`,
             );
         }
 

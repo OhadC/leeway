@@ -106,10 +106,10 @@ not just package scripts. Other agents are
 told to run `leeway <command>`. Codex has no reliable marker, and Copilot and Aider document none, so for them the guard
 can't fire.
 
-**Listing and killing scan the OS.** `leeway list` shows every range from every repo with the pid on each port, plus orphans: listeners in the default
-pool outside every living range. A registry-only listing can't tell a running server from a dead registration, which is most of the question.
-`leeway kill [<port>]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in the default
-pool, just the listeners on it; a port outside every range and outside the default pool is refused. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
+**Listing and killing scan the OS.** `leeway list` shows every range from every repo with the pid on each port, plus orphans: listeners in any pool
+outside every living range. A registry-only listing can't tell a running server from a dead registration, which is most of the question.
+`leeway kill [<port>]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in any
+pool, just the listeners on it; a port outside every range and every pool is refused. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
 above it and that run's tree, found by walking parent pids in a fresh process table and recognising the run by its command line
 (`leeway/dist/cli.mjs`). Killing only the listener left watchers (`tsx watch`) alive to restart it on the next file change. An orphan's run
 is spared: it can be a moved range's old server under a run that also serves the current range. Recording each run's pid in the registry was

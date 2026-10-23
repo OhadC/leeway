@@ -24,8 +24,8 @@ From 0.3 on, the registry is forward-compatible, and stays so.
   else it holds and wherever it sits. `ports` is read when every value is a port inside the range, for keeping a range and for listing;
   otherwise the range is listed without its ports. Any other entry is passed through untouched and holds nothing.
 - **Listing and killing.** Living ranges are listed and killable wherever they sit, and `kill <port>` resolves a port in any of them.
-  Orphans and the orphan-port kill stay in the default pool, so unrelated tools on common ports are never treated as leeway's;
-  `kill <port>` refuses a port outside every living range and outside the default pool. A claim still places ranges only in a pool.
+  Orphans and the orphan-port kill stay in the machine's pools, so unrelated tools on common ports are never treated as leeway's;
+  `kill <port>` refuses a port outside every living range and every pool. A claim still places ranges only in a pool.
 - **Refusal.** Only a registry that isn't a JSON object with an object `folders` refuses claims.
 - **Frozen.** The registry path, the lock protocol, the meaning of every existing key, the environment handed down between nested calls
   (`LEEWAY_FOLDER` and the port variables), and the `{{NAME}}` and `{{LEEWAY_ENV}}` placeholders. Existing keys are never removed,

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { RangeKill } from "./range-kill.ts";
-import type { RangeEntry } from "./range-registry.ts";
+import type { Pool, RangeEntry } from "./range-registry.ts";
+
+const DEFAULT_POOLS: Pool[] = [{ start: 21000, end: 29999 }];
 
 const APP: RangeEntry = { folder: "c:\\dev\\app", start: 21000, end: 21002, ports: { web: 21000, api: 21001, docs: 21002 } };
 
@@ -38,7 +40,7 @@ describe("RangeKill.planOfFolder", () => {
 
 describe("RangeKill.planOfPort", () => {
     it("targets the whole range containing the port, with the leeway runs above its listeners", () => {
-        expect(RangeKill.planOfPort([APP, TOOL], LISTENERS, 21003)).toEqual({
+        expect(RangeKill.planOfPort([APP, TOOL], LISTENERS, 21003, DEFAULT_POOLS)).toEqual({
             scope: "c:\\dev\\tool  21003-21003",
             names: TOOL.ports,
             targets: [{ pid: 80, ports: [21003] }],
@@ -49,7 +51,7 @@ describe("RangeKill.planOfPort", () => {
     it("targets only the listeners on an orphan port in the pool, without the leeway runs above them", () => {
         const listeners = [...LISTENERS, { port: 25000, pid: 90 }, { port: 25000, pid: 91 }, { port: 25001, pid: 92 }];
 
-        expect(RangeKill.planOfPort([APP, TOOL], listeners, 25000)).toEqual({
+        expect(RangeKill.planOfPort([APP, TOOL], listeners, 25000, DEFAULT_POOLS)).toEqual({
             scope: "orphan port 25000",
             names: {},
             targets: [
@@ -60,10 +62,24 @@ describe("RangeKill.planOfPort", () => {
         });
     });
 
-    it("targets the whole range containing the port when that range lies outside the pool", () => {
+    it("targets only the listeners on an orphan port in any pool", () => {
+        const pools: Pool[] = [
+            { start: 21000, end: 21003 },
+            { start: 3000, end: 3999 },
+        ];
+
+        expect(RangeKill.planOfPort([APP, TOOL], LISTENERS, 3000, pools)).toEqual({
+            scope: "orphan port 3000",
+            names: {},
+            targets: [{ pid: 5, ports: [3000] }],
+            withRuns: false,
+        });
+    });
+
+    it("targets the whole range containing the port when that range lies outside every pool", () => {
         const outside: RangeEntry = { folder: "c:\\dev\\outside", start: 3000, end: 3001, ports: { web: 3000, api: 3001 } };
 
-        expect(RangeKill.planOfPort([APP, outside], LISTENERS, 3001)).toEqual({
+        expect(RangeKill.planOfPort([APP, outside], LISTENERS, 3001, DEFAULT_POOLS)).toEqual({
             scope: "c:\\dev\\outside  3000-3001",
             names: outside.ports,
             targets: [{ pid: 5, ports: [3000] }],
@@ -71,16 +87,21 @@ describe("RangeKill.planOfPort", () => {
         });
     });
 
-    it("refuses a port outside every range and outside the pool", () => {
-        expect(() => RangeKill.planOfPort([APP], LISTENERS, 3000)).toThrow(
-            "leeway: port 3000 is in no range and outside the pool 21000-29999; leeway only kills in ranges and the pool",
+    it("refuses a port outside every range and every pool, naming the pools", () => {
+        const pools: Pool[] = [
+            { start: 4000, end: 4999 },
+            { start: 21000, end: 29999 },
+        ];
+
+        expect(() => RangeKill.planOfPort([APP], LISTENERS, 3000, pools)).toThrow(
+            "leeway: port 3000 is in no range and outside every pool (4000-4999, 21000-29999); leeway only kills in ranges and pools",
         );
     });
 });
 
 describe("RangeKill.render", () => {
     it("reports each pid with its named ports as killed or with its failure", () => {
-        const plan = RangeKill.planOfPort([APP], LISTENERS, 21000);
+        const plan = RangeKill.planOfPort([APP], LISTENERS, 21000, DEFAULT_POOLS);
 
         expect(RangeKill.render(plan, new Map([[60, "access denied"]]))).toBe(
             [
@@ -93,19 +114,19 @@ describe("RangeKill.render", () => {
     });
 
     it("reports an orphan port's pids without names", () => {
-        expect(RangeKill.render(RangeKill.planOfPort([], [{ port: 25000, pid: 90 }], 25000), new Map())).toBe(
+        expect(RangeKill.render(RangeKill.planOfPort([], [{ port: 25000, pid: 90 }], 25000, DEFAULT_POOLS), new Map())).toBe(
             ["leeway: orphan port 25000", "  pid 90  25000  killed", ""].join("\n"),
         );
     });
 
     it("says so when nothing listens on an orphan port", () => {
-        expect(RangeKill.render(RangeKill.planOfPort([], [], 25000), new Map())).toBe(
+        expect(RangeKill.render(RangeKill.planOfPort([], [], 25000, DEFAULT_POOLS), new Map())).toBe(
             "leeway: nothing is listening in orphan port 25000\n",
         );
     });
 
     it("says so when nothing listens in the range", () => {
-        expect(RangeKill.render(RangeKill.planOfPort([APP], [], 21000), new Map())).toBe(
+        expect(RangeKill.render(RangeKill.planOfPort([APP], [], 21000, DEFAULT_POOLS), new Map())).toBe(
             "leeway: nothing is listening in c:\\dev\\app  21000-21002\n",
         );
     });

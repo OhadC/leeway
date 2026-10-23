@@ -99,6 +99,20 @@ describe("leeway list and kill", () => {
         expect(await accepts(orphanPort)).toBe(false);
     }, 60_000);
 
+    it("lists and kills an orphan listening in a pool the machine's owner set", async () => {
+        const { dir, home } = LeewayCli.folder();
+        const orphanPort = await freePort();
+        const server = await startServer(orphanPort);
+
+        LeewayCli.run(["pools", "set", `${orphanPort}-${orphanPort}`], dir, home);
+        const listed = LeewayCli.run(["list"], dir, home);
+        const killed = LeewayCli.run(["kill", String(orphanPort)], dir, home);
+
+        expect(listed.stdout).toBe(`orphans (in a pool, outside every range)\n  ${orphanPort}  pid ${server.pid}\n`);
+        expect(killed.stdout).toBe(`leeway: orphan port ${orphanPort}\n  pid ${server.pid}  ${orphanPort}  killed\n`);
+        expect(await accepts(orphanPort)).toBe(false);
+    }, 60_000);
+
     it("kills only the listener on an orphan port, leaving the leeway run above it", async () => {
         const { dir, home, ports } = claimedFolder();
         const orphanPort = (ports.PORT_API ?? 0) + 100;
@@ -168,6 +182,18 @@ async function stopServer(server: ChildProcess): Promise<void> {
 
     ProcessTree.killTreeQuietly(server.pid ?? 0);
     await exited;
+}
+
+function freePort(): Promise<number> {
+    const server = net.createServer();
+
+    return new Promise(resolve => {
+        server.listen(0, () => {
+            const { port } = server.address() as net.AddressInfo;
+
+            server.close(() => resolve(port));
+        });
+    });
 }
 
 function accepts(port: number | undefined): Promise<boolean> {

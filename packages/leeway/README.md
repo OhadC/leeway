@@ -205,15 +205,15 @@ says so: restart anything still on the old ports. Use it as `eval "$(leeway env 
 
 ### `leeway list [--json]`
 
-Every registered range on the machine, from every repo, with the pid listening on each port, followed by orphans: listeners in the
-default pool outside every range (for example a server left behind by a deleted worktree).
+Every registered range on the machine, from every repo, with the pid listening on each port, followed by orphans: listeners in any of
+the machine's pools outside every range (for example a server left behind by a deleted worktree).
 
 ```text
 /home/me/app  21000-21001
   PORT_WEB  21000  pid 4120
   PORT_API  21001  -
 
-orphans (in the pool, outside every range)
+orphans (in a pool, outside every range)
   21007  pid 5532
 ```
 
@@ -243,8 +243,8 @@ orphans (in the pool, outside every range)
 Kills every process tree listening in this folder's range, or with a port, in the range that contains it (any repo's). A listener started
 under `leeway` is killed with the nearest `leeway` run above it and that run's whole tree, so a watcher between them (`tsx watch`,
 `nodemon`) can't restart it; that takes down whatever else the run started too, like a `tsc --watch` beside the server under the same
-`concurrently`. A default-pool port outside every range is an orphan: `leeway kill <port>` kills just the listeners on that port, never
-their run. Ports outside every range and outside the default pool are refused.
+`concurrently`. A port in a pool outside every range is an orphan: `leeway kill <port>` kills just the listeners on that port, never
+their run. Ports outside every range and every pool are refused.
 
 ### `leeway pools [set <start-end>... | reset]`
 

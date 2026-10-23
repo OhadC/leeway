@@ -9,14 +9,14 @@ import { ListenerScan } from "./listener-scan.ts";
 import { ProcessTree } from "./process-tree.ts";
 import { RangeKill } from "./range-kill.ts";
 import { RangeListing } from "./range-listing.ts";
-import { RangeRegistry } from "./range-registry.ts";
+import { type Pool, RangeRegistry } from "./range-registry.ts";
 import { RunWithPorts } from "./run-with-ports.ts";
 
 const USAGE = [
     "usage: leeway [--default | --inherit] [--] <command>   run <command> with this folder's range as env vars; {{NAME}} in <command> becomes its port, {{LEEWAY_ENV}} every port as JSON",
     "                                                       --default: the default ports; --inherit: the ports in the environment, else the default ports",
     "       leeway env --export                             claim this folder's range and print it as export lines",
-    "       leeway list [--json]                            show every range, the pids listening in it, and orphan listeners in the pool",
+    "       leeway list [--json]                            show every range, the pids listening in it, and orphan listeners in the pools",
     "       leeway kill [<port>]                            kill what listens in this folder's range, or in the range holding <port>, or on an orphan <port>",
     "       leeway pools [set <start-end>... | reset]       show the machine's pools, set them in order of preference, or go back to the default pool",
     "       leeway --help | -h | --version",
@@ -40,9 +40,10 @@ async function runLeeway(): Promise<void> {
     } else if (subcommand === "env" && rest.length === 1 && rest[0] === "--export") {
         await printExportLines(ConfigFile.find(process.cwd()));
     } else if (subcommand === "list" && (rest.length === 0 || (rest.length === 1 && rest[0] === "--json"))) {
-        const listing = RangeListing.collect(RangeRegistry.livingEntries(), ListenerScan.listeners());
+        const pools = machinePools();
+        const listing = RangeListing.collect(RangeRegistry.livingEntries(), ListenerScan.listeners(), pools);
 
-        process.stdout.write(rest.length === 0 ? RangeListing.render(listing) : `${JSON.stringify(listing, undefined, 4)}\n`);
+        process.stdout.write(rest.length === 0 ? RangeListing.render(listing, pools) : `${JSON.stringify(listing, undefined, 4)}\n`);
     } else if (subcommand === "kill" && rest.length <= 1 && rest.every(arg => /^\d+$/.test(arg))) {
         killRange(rest[0]);
     } else if (subcommand === "pools" && rest[0] === "set") {
@@ -113,7 +114,7 @@ function killRange(port: string | undefined): void {
     const plan =
         port === undefined
             ? RangeKill.planOfFolder(entries, listeners, ConfigFile.find(process.cwd()).folder, process.platform)
-            : RangeKill.planOfPort(entries, listeners, Number(port));
+            : RangeKill.planOfPort(entries, listeners, Number(port), machinePools());
     const failures = ProcessTree.killTrees(
         plan.targets.map(target => target.pid),
         plan.withRuns,
@@ -124,6 +125,10 @@ function killRange(port: string | undefined): void {
     if (failures.size > 0) {
         process.exit(1);
     }
+}
+
+function machinePools(): Pool[] {
+    return RangeRegistry.pools() ?? [RangeRegistry.DEFAULT_POOL];
 }
 
 function printPools(): void {

@@ -733,8 +733,22 @@ describe("RangeRegistry lookups", () => {
         expect(RangeRegistry.entryOfPort([repo, other], 21003)).toBeUndefined();
     });
 
-    it("tells whether a port is in the 21000-29999 pool", () => {
-        expect([20999, 21000, 29999, 30000].map(port => RangeRegistry.isInPool(port))).toEqual([false, true, true, false]);
+    it("tells whether a port is in any pool", () => {
+        const pools = [
+            { start: 3000, end: 3999 },
+            { start: 21000, end: 29999 },
+        ];
+
+        expect([2999, 3000, 3999, 4000, 20999, 21000, 29999, 30000].map(port => RangeRegistry.isInPools(port, pools))).toEqual([
+            false,
+            true,
+            true,
+            false,
+            false,
+            true,
+            true,
+            false,
+        ]);
     });
 });
 

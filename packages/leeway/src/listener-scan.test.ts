@@ -120,7 +120,8 @@ function printed(stdout: string): CommandRunner {
 
 async function listenInPool(): Promise<net.Server> {
     for (let attempt = 0; ; attempt++) {
-        const port = RangeRegistry.POOL_START + Math.floor(Math.random() * (RangeRegistry.POOL_END - RangeRegistry.POOL_START + 1));
+        const { start, end } = RangeRegistry.DEFAULT_POOL;
+        const port = start + Math.floor(Math.random() * (end - start + 1));
         const server = net.createServer();
 
         try {
