@@ -48,7 +48,6 @@ ignores them.
 | ------------ | ------- | ---------------------------------------------------------------------- |
 | `ports`      | -       | the catalogue; required                                                |
 | `agentGuard` | `false` | refuse default ports to agent shells (see [Agent guard](#agent-guard)) |
-| `$schema`    | -       | the JSON schema leeway ships, for editor completion and validation     |
 
 Unknown settings are refused, so a typo fails loudly.
 

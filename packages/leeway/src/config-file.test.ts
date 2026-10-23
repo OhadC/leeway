@@ -44,6 +44,13 @@ describe("ConfigFile.find", () => {
         expect(ConfigFile.find(folder).config.ports).toEqual({ PORT_APP: { port: 3000 } });
     });
 
+    it("refuses a $schema that is not a string", () => {
+        const folder = tempFolder();
+        writeConfig(folder, { $schema: 5, ports: { PORT_APP: { port: 3000 } } });
+
+        expect(() => ConfigFile.find(folder)).toThrowError(`leeway: "$schema" in ${path.join(folder, "leeway.json")} must be a string`);
+    });
+
     it("refuses, naming the starting folder, when no folder above it has a config", () => {
         const folder = tempFolder();
 
@@ -84,16 +91,8 @@ describe("ConfigFile.find", () => {
         writeConfig(folder, { ports: { PORT_APP: { port: 3000 } }, agentGaurd: true });
 
         expect(() => ConfigFile.find(folder)).toThrowError(
-            `leeway: "agentGaurd" in ${path.join(folder, "leeway.json")} is not a setting (ports, agentGuard, $schema)`,
+            `leeway: "agentGaurd" in ${path.join(folder, "leeway.json")} is not a setting (ports, agentGuard)`,
         );
-    });
-
-    it("accepts exactly the settings the shipped schema describes", () => {
-        const folder = tempFolder();
-        writeConfig(folder, { ports: { PORT_APP: { port: 3000 } }, unknown: true });
-        const schema = JSON.parse(fs.readFileSync(new URL("../schema.json", import.meta.url), "utf8"));
-
-        expect(settingsListedWhenRefusing(folder).toSorted()).toEqual(Object.keys(schema.properties).toSorted());
     });
 
     it("refuses an agent guard setting that is not a boolean", () => {
@@ -154,25 +153,19 @@ describe("ConfigFile.find", () => {
     });
 });
 
+describe("ConfigFile.SETTINGS", () => {
+    it("are the shipped schema's top-level properties, besides $schema", () => {
+        const schema = JSON.parse(fs.readFileSync(new URL("../schema.json", import.meta.url), "utf8"));
+
+        expect(Object.keys(schema.properties).toSorted()).toEqual(["$schema", ...ConfigFile.SETTINGS].toSorted());
+    });
+});
+
 function tempFolder(): string {
     const folder = fs.mkdtempSync(path.join(os.tmpdir(), "leeway-config-"));
     folders.push(folder);
 
     return folder;
-}
-
-function settingsListedWhenRefusing(folder: string): string[] {
-    try {
-        ConfigFile.find(folder);
-    } catch (error) {
-        const listed = /is not a setting \((.*)\)$/.exec((error as Error).message)?.[1];
-
-        if (listed !== undefined) {
-            return listed.split(", ");
-        }
-    }
-
-    throw new Error(`${folder} was not refused as an unknown setting`);
 }
 
 function writeConfig(folder: string, content: unknown): void {

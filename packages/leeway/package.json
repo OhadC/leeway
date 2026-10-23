@@ -36,6 +36,7 @@
     "exports": {
         ".": "./dist/index.mjs",
         "./vite": "./dist/vite.mjs",
+        "./schema.json": "./schema.json",
         "./package.json": "./package.json"
     },
     "peerDependencies": {
