@@ -60,9 +60,20 @@ describe("RangeKill.planOfPort", () => {
         });
     });
 
-    it("refuses a port outside the pool", () => {
+    it("targets the whole range containing the port when that range lies outside the pool", () => {
+        const outside: RangeEntry = { folder: "c:\\dev\\outside", start: 3000, end: 3001, ports: { web: 3000, api: 3001 } };
+
+        expect(RangeKill.planOfPort([APP, outside], LISTENERS, 3001)).toEqual({
+            scope: "c:\\dev\\outside  3000-3001",
+            names: outside.ports,
+            targets: [{ pid: 5, ports: [3000] }],
+            withRuns: true,
+        });
+    });
+
+    it("refuses a port outside every range and outside the pool", () => {
         expect(() => RangeKill.planOfPort([APP], LISTENERS, 3000)).toThrow(
-            "leeway: port 3000 is outside the pool 21000-29999; leeway only kills there",
+            "leeway: port 3000 is in no range and outside the pool 21000-29999; leeway only kills there",
         );
     });
 });

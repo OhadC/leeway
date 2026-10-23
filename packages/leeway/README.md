@@ -75,6 +75,8 @@ repo on the machine:
 - Ports held by something else, or reserved by the OS, are skipped at claim time.
 - Ranges of folders that no longer exist are dropped the next time a claim has to place a range.
 - Claims are serialised by a lock next to the registry, so concurrent `leeway` runs never get the same range.
+- Repos on different leeway versions share the registry: from 0.3 on, no version refuses it, a claim keeps data it doesn't understand,
+  and every readable range holds its ports.
 
 Default ports never touch the registry.
 
@@ -240,7 +242,7 @@ Kills every process tree listening in this folder's range, or with a port, in th
 under `leeway` is killed with the nearest `leeway` run above it and that run's whole tree, so a watcher between them (`tsx watch`,
 `nodemon`) can't restart it; that takes down whatever else the run started too, like a `tsc --watch` beside the server under the same
 `concurrently`. A pool port outside every range is an orphan: `leeway kill <port>` kills just the listeners on that port, never their run.
-Ports outside the pool are refused.
+Ports outside every range and outside the pool are refused.
 
 ## Agents
 

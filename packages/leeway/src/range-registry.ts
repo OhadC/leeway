@@ -41,7 +41,7 @@ const MISSING_ADDRESS_FAMILY_CODES = new Set(["EAFNOSUPPORT", "EADDRNOTAVAIL"]);
 type StoredRange = Omit<RangeEntry, "folder">;
 
 type RegistryFile = {
-    version: number;
+    [key: string]: unknown;
     folders: Record<string, unknown>;
 };
 
@@ -82,9 +82,11 @@ export class RangeRegistry {
         registryPath = RangeRegistry.defaultPath(os.homedir()),
         pathExists: (candidate: string) => boolean = fs.existsSync,
     ): RangeEntry[] {
-        return Object.entries(RangeRegistry.read(registryPath).folders)
-            .filter((pair): pair is [string, StoredRange] => RangeRegistry.isStoredRange(pair[1]) && pathExists(pair[0]))
-            .map(([folder, range]) => ({ folder, ...range }));
+        return Object.entries(RangeRegistry.read(registryPath).folders).flatMap(([folder, value]) => {
+            const range = RangeRegistry.storedRange(value);
+
+            return range && pathExists(folder) ? [{ folder, ...range }] : [];
+        });
     }
 
     static entryOfFolder(entries: RangeEntry[], folder: string, platform: NodeJS.Platform): RangeEntry | undefined {
@@ -117,19 +119,11 @@ export class RangeRegistry {
     }: ClaimRangeOptions): Promise<RangeClaim> {
         const folder = RangeRegistry.folderKey(folderPath, platform);
         const registry = RangeRegistry.read(registryPath);
-
-        if (registry.version > RangeRegistry.VERSION) {
-            throw new Error(
-                `leeway: ${registryPath} has format version ${registry.version}, this leeway knows ${RangeRegistry.VERSION}; update leeway`,
-            );
-        }
-
         const entries = Object.entries(registry.folders);
         const isOwn = ([key]: [string, unknown]) => RangeRegistry.folderKey(key, platform) === folder;
-        const current = entries
-            .filter(isOwn)
-            .map(([, value]) => value)
-            .find(RangeRegistry.isStoredRange);
+        const own = entries.filter(isOwn);
+        const [current] = RangeRegistry.storedRanges(own);
+        const ownKeys = Object.fromEntries(own.flatMap(([, value]) => (isObject(value) ? Object.entries(value) : [])));
         const others = entries.filter(pair => !isOwn(pair));
         const kept = current && (await RangeRegistry.keep(current, names, RangeRegistry.storedRanges(others), testPort));
         const living = kept ? others : others.filter(([key]) => pathExists(key));
@@ -142,8 +136,8 @@ export class RangeRegistry {
         }
 
         RangeRegistry.write(registryPath, {
-            version: RangeRegistry.VERSION,
-            folders: { ...Object.fromEntries(living), [folder]: range },
+            ...registry,
+            folders: { ...Object.fromEntries(living), [folder]: { ...ownKeys, ...range } },
         });
 
         return { entry: { folder, ...range }, previous: current && { folder, ...current } };
@@ -251,35 +245,31 @@ export class RangeRegistry {
 
         const registry = parseJson(text);
 
-        if (!isObject(registry) || !Number.isInteger(registry.version) || !isObject(registry.folders)) {
+        if (!isObject(registry) || !isObject(registry.folders)) {
             throw new Error(`leeway: ${registryPath} is not a valid range registry; fix or delete it`);
         }
 
-        return registry as RegistryFile;
+        return { ...registry, folders: registry.folders };
     }
 
     private static storedRanges(pairs: [string, unknown][]): StoredRange[] {
-        return pairs.map(([, value]) => value).filter(RangeRegistry.isStoredRange);
+        return pairs.flatMap(([, value]) => RangeRegistry.storedRange(value) ?? []);
     }
 
-    private static isStoredRange(value: unknown): value is StoredRange {
+    private static storedRange(value: unknown): StoredRange | undefined {
         if (!isObject(value)) {
-            return false;
+            return undefined;
         }
 
-        const { start, end, ports } = value as StoredRange;
+        const { start, end, ports } = value;
 
-        if (Object.keys(value).length !== 3 || !Number.isInteger(start) || !Number.isInteger(end) || !isObject(ports)) {
-            return false;
+        if (!isPortNumber(start) || !isPortNumber(end) || start > end) {
+            return undefined;
         }
 
-        if (!RangeRegistry.isInPool(start) || !RangeRegistry.isInPool(end)) {
-            return false;
-        }
+        const isUsable = isObject(ports) && Object.values(ports).every(port => isPortNumber(port) && port >= start && port <= end);
 
-        const portNumbers = Object.values(ports);
-
-        return portNumbers.length === end - start + 1 && portNumbers.every(port => Number.isInteger(port) && port >= start && port <= end);
+        return { start, end, ports: isUsable ? (ports as Record<string, number>) : {} };
     }
 
     private static async firstBlockedPort(
@@ -291,7 +281,7 @@ export class RangeRegistry {
     ): Promise<number | undefined> {
         const end = start + size - 1;
 
-        if (end > RangeRegistry.POOL_END) {
+        if (!RangeRegistry.isInPool(start) || !RangeRegistry.isInPool(end)) {
             return end;
         }
 
@@ -339,6 +329,10 @@ function parseJson(text: string): unknown {
 
 function isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPortNumber(value: unknown): value is number {
+    return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 65535;
 }
 
 function bindErrorCode(port: number, host: string): Promise<string | undefined> {

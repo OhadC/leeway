@@ -54,9 +54,36 @@ describe("RangeListing.collect", () => {
             { port: 29999, pid: 31 },
         ]);
     });
+
+    it("lists a range outside the pool with its listeners, which are not orphans", () => {
+        const outside: RangeEntry = { folder: "C:\\dev\\outside", start: 3000, end: 3001, ports: { web: 3000, api: 3001 } };
+
+        const listing = RangeListing.collect([outside], [{ port: 3001, pid: 70 }]);
+
+        expect(listing).toEqual({
+            ranges: [
+                {
+                    folder: "C:\\dev\\outside",
+                    start: 3000,
+                    end: 3001,
+                    ports: [
+                        { name: "web", port: 3000, pids: [] },
+                        { name: "api", port: 3001, pids: [70] },
+                    ],
+                },
+            ],
+            orphans: [],
+        });
+    });
 });
 
 describe("RangeListing.render", () => {
+    it("prints a range whose ports are unreadable as its folder and span only", () => {
+        const listing = RangeListing.collect([{ folder: "C:\\dev\\newer", start: 21010, end: 21011, ports: {} }], []);
+
+        expect(RangeListing.render(listing)).toBe("C:\\dev\\newer  21010-21011\n");
+    });
+
     it("prints each range as a table of names, ports and pids, then the orphans", () => {
         const listing = RangeListing.collect(
             [APP, TOOL],

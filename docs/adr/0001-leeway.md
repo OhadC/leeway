@@ -40,7 +40,7 @@ every repo shares one allocator and one listing.
 
 **Pool 21000-29999.** All ranges come from this pool, so "is this port leeway's?" is a range check. It is above the low ports products use
 and clear of the earlier `dev-ports` layouts (20020-21999), so old and new tooling run side by side. It is not configurable. A stored range
-outside the pool is data the code doesn't understand, so it is never kept, listed or killed.
+outside the pool still holds its ports and is listed and killed, but a claim never keeps it: the folder moves into the pool.
 
 **Claiming.** Under a lock, a claim keeps the folder's range when it overlaps no other stored range and its ports pass the port test,
 without checking which folders still exist. Otherwise it drops entries whose folder is gone, tries the folder's current start first, so a grown catalogue
@@ -57,9 +57,9 @@ prepared directory into place so it is never seen empty while held. Waiters retr
 never blocks later claims, and the directory is only removed while empty, so breaking a stale lock or a late release never removes another
 claim's lock. The registry is written atomically (temp file, rename).
 
-**Unknown data.** Entries the code doesn't understand are passed through untouched and don't occupy a range, so one leeway version never
-erases another's claims. A registry with a newer `version` refuses claims ("update leeway"); one that isn't a registry refuses claims rather
-than being overwritten.
+**Unknown data.** The registry is forward-compatible, as [0002](0002-forward-compatible-registry.md) records: no leeway refuses it
+because of its `version`, every write keeps data it doesn't understand, and every readable range holds its ports. One that isn't a
+registry refuses claims rather than being overwritten.
 
 **Claiming is the default.** `leeway <command>` claims the folder's range and runs the command on it, ignoring ports already in the
 environment: a claim is cheap and repeatable, and an inherited environment can belong to another folder. `leeway --default <command>` runs
@@ -100,7 +100,7 @@ can't fire.
 **Listing and killing scan the OS.** `leeway list` shows every range from every repo with the pid on each port, plus orphans: pool listeners
 outside every living range. A registry-only listing can't tell a running server from a dead registration, which is most of the question.
 `leeway kill [<port>]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in the pool, just
-the listeners on it; it never kills outside the pool. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
+the listeners on it; outside every range it never kills outside the pool. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
 above it and that run's tree, found by walking parent pids in a fresh process table and recognising the run by its command line
 (`leeway/dist/cli.mjs`). Killing only the listener left watchers (`tsx watch`) alive to restart it on the next file change. An orphan's run
 is spared: it can be a moved range's old server under a run that also serves the current range. Recording each run's pid in the registry was

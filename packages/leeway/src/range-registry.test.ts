@@ -72,7 +72,7 @@ describe("RangeRegistry.claim", () => {
         const { entry, previous } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"]);
 
         expect(entry).toEqual({ folder: "/repo", start: 21000, end: 21001, ports: { PORT_A: 21000, PORT_B: 21001 } });
-        expect(previous).toBeUndefined();
+        expect(previous).toEqual({ folder: "/repo", start: 5000, end: 5001, ports: { PORT_A: 5000, PORT_B: 5001 } });
     });
 
     it("places folders with different catalogue sizes side by side without overlap", async () => {
@@ -192,12 +192,68 @@ describe("RangeRegistry.claim", () => {
         expect(readRegistry(registryPath).folders["/repo"]).toEqual({ start: 21002, end: 21003, ports: { PORT_A: 21002, PORT_B: 21003 } });
     });
 
-    it("writes back entries it does not understand unchanged, without treating them as holding ports", async () => {
+    it("treats another folder's entry with extra keys as holding its ports, and keeps its keys", async () => {
+        const newer = { start: 21000, end: 21001, ports: { PORT_X: 21000, PORT_Y: 21001 }, pool: "web", pinned: true };
+        const registryPath = createRegistryPath({ version: 1, folders: { "/newer": newer } });
+
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A"]);
+
+        expect(entry.start).toBe(21002);
+        expect(readRegistry(registryPath).folders["/newer"]).toEqual(newer);
+    });
+
+    it("keeps the extra keys of the folder's own entry when the claim keeps its range", async () => {
+        const registryPath = createRegistryPath({
+            version: 1,
+            folders: { "/repo": { start: 21010, end: 21010, ports: { PORT_A: 21010 }, pool: "web" } },
+        });
+
+        await claim(registryPath, "/repo", ["PORT_A", "PORT_B"]);
+
+        expect(readRegistry(registryPath).folders["/repo"]).toEqual({
+            start: 21010,
+            end: 21011,
+            ports: { PORT_A: 21010, PORT_B: 21011 },
+            pool: "web",
+        });
+    });
+
+    it("keeps the extra keys of the folder's own entry when the claim moves its range", async () => {
+        const registryPath = createRegistryPath({
+            version: 1,
+            folders: {
+                "/repo": { start: 21010, end: 21010, ports: { PORT_A: 21010 }, pool: "web" },
+                "/next": { start: 21011, end: 21011, ports: { PORT_X: 21011 } },
+            },
+        });
+
+        await claim(registryPath, "/repo", ["PORT_A", "PORT_B"]);
+
+        expect(readRegistry(registryPath).folders["/repo"]).toEqual({
+            start: 21000,
+            end: 21001,
+            ports: { PORT_A: 21000, PORT_B: 21001 },
+            pool: "web",
+        });
+    });
+
+    it("treats a range reaching outside the pool as holding its ports", async () => {
+        const straddling = { start: 20990, end: 21004, ports: { PORT_X: 20990, PORT_Y: 21004 } };
+        const registryPath = createRegistryPath({ version: 1, folders: { "/straddling": straddling } });
+
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A"]);
+
+        expect(entry.start).toBe(21005);
+        expect(readRegistry(registryPath).folders["/straddling"]).toEqual(straddling);
+    });
+
+    it("writes back entries without a readable range unchanged, without treating them as holding ports", async () => {
         const unknown = {
-            "/extra-field": { start: 21000, end: 21001, ports: { PORT_A: 21000, PORT_B: 21001 }, owner: "newer-tool" },
-            "/wrong-width": { start: 21000, end: 21005, ports: { PORT_A: 21000 } },
-            "/port-outside-range": { start: 21000, end: 21000, ports: { PORT_A: 21007 } },
-            "/outside-pool": { start: 5000, end: 5001, ports: { PORT_A: 5000, PORT_B: 5001 } },
+            "/no-range": { ports: { PORT_A: 21000 }, pool: "web" },
+            "/reversed": { start: 21001, end: 21000, ports: { PORT_A: 21000 } },
+            "/past-the-last-port": { start: 21000, end: 65536, ports: { PORT_A: 21000 } },
+            "/fractional": { start: 21000.5, end: 21001, ports: { PORT_A: 21001 } },
+            "/text": { start: "21000", end: "21001", ports: { PORT_A: 21000 } },
             "/not-an-object": "21000",
         };
         const registryPath = createRegistryPath({ version: 1, folders: unknown });
@@ -243,19 +299,32 @@ describe("RangeRegistry.claim", () => {
         expect(Object.keys(readRegistry(registryPath).folders)).toEqual(["/home/dev/Repo", "/home/dev/repo"]);
     });
 
-    it("refuses to claim from a registry written by a newer format version, leaving the file alone", async () => {
-        const registryPath = createRegistryPath({ version: 2, folders: { "/deleted": { start: 21000 } } });
-        const before = fs.readFileSync(registryPath, "utf8");
+    it.each([7, "2.0"])("claims from a registry with version %j and keeps that version", async version => {
+        const registryPath = createRegistryPath({ version, folders: {} });
 
-        await expect(claim(registryPath, "/repo", ["PORT_A"], { pathExists: () => false })).rejects.toThrow(/update leeway/);
-        expect(fs.readFileSync(registryPath, "utf8")).toBe(before);
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A"]);
+
+        expect(entry).toEqual({ folder: "/repo", start: 21000, end: 21000, ports: { PORT_A: 21000 } });
+        expect(readRegistry(registryPath).version).toBe(version);
+    });
+
+    it("keeps top-level registry data it does not understand", async () => {
+        const registryPath = createRegistryPath({ version: 1, pools: { web: [30000, 30999] }, folders: {} });
+
+        await claim(registryPath, "/repo", ["PORT_A"]);
+
+        expect(readRegistry(registryPath)).toEqual({
+            version: 1,
+            pools: { web: [30000, 30999] },
+            folders: { "/repo": { start: 21000, end: 21000, ports: { PORT_A: 21000 } } },
+        });
     });
 
     it.each([
         ["corrupt JSON", "{ not json"],
         ["a JSON array", "[]"],
         ["a registry without folders", JSON.stringify({ version: 1 })],
-        ["a non-integer version", JSON.stringify({ version: "1", folders: {} })],
+        ["a registry whose folders is not an object", JSON.stringify({ version: 1, folders: [] })],
     ])("refuses to claim from %s, leaving the file alone", async (_, contents) => {
         const registryPath = createRegistryPath();
         fs.mkdirSync(path.dirname(registryPath), { recursive: true });
@@ -335,9 +404,9 @@ describe("RangeRegistry.claim lock", () => {
     });
 
     it("releases the lock after a failed claim", async () => {
-        const registryPath = createRegistryPath({ version: 2, folders: {} });
+        const registryPath = createRegistryPath([]);
 
-        await expect(claim(registryPath, "/repo", ["PORT_A"])).rejects.toThrow(/update leeway/);
+        await expect(claim(registryPath, "/repo", ["PORT_A"])).rejects.toThrow(registryPath);
         fs.writeFileSync(registryPath, JSON.stringify({ version: 1, folders: {} }));
         expect(await claim(registryPath, "/repo", ["PORT_A"], { now: () => Date.now() - 60_000 })).toMatchObject({
             entry: { start: 21000 },
@@ -359,20 +428,27 @@ describe("RangeRegistry.testPort", () => {
 });
 
 describe("RangeRegistry.livingEntries", () => {
-    it("returns the understood entries of existing folders, even from a newer format version, without rewriting the file", () => {
+    it("returns the readable ranges of existing folders wherever they sit, without rewriting the file", () => {
         const alive = { start: 21002, end: 21003, ports: { PORT_A: 21002, PORT_B: 21003 } };
         const registryPath = createRegistryPath({
             version: 2,
             folders: {
                 "/deleted": { start: 21000, end: 21001, ports: { PORT_A: 21000, PORT_B: 21001 } },
                 "/alive": alive,
-                "/newer-format": { start: 21004, end: 21004, ports: { PORT_A: 21004 }, owner: "newer-tool" },
+                "/newer": { start: 21004, end: 21004, ports: { PORT_A: 21004 }, pool: "web" },
                 "/outside-pool": { start: 5000, end: 5000, ports: { PORT_A: 5000 } },
+                "/unreadable-ports": { start: 21006, end: 21007, ports: { PORT_A: 21009 } },
+                "/no-range": { ports: { PORT_A: 21008 } },
             },
         });
         const before = fs.readFileSync(registryPath, "utf8");
 
-        expect(RangeRegistry.livingEntries(registryPath, candidate => candidate !== "/deleted")).toEqual([{ folder: "/alive", ...alive }]);
+        expect(RangeRegistry.livingEntries(registryPath, candidate => candidate !== "/deleted")).toEqual([
+            { folder: "/alive", ...alive },
+            { folder: "/newer", start: 21004, end: 21004, ports: { PORT_A: 21004 } },
+            { folder: "/outside-pool", start: 5000, end: 5000, ports: { PORT_A: 5000 } },
+            { folder: "/unreadable-ports", start: 21006, end: 21007, ports: {} },
+        ]);
         expect(fs.readFileSync(registryPath, "utf8")).toBe(before);
     });
 
@@ -418,7 +494,7 @@ function createRegistryPath(contents?: unknown): string {
     return registryPath;
 }
 
-function readRegistry(registryPath: string): { version: number; folders: Record<string, unknown> } {
+function readRegistry(registryPath: string): { version: unknown; folders: Record<string, unknown> } {
     return JSON.parse(fs.readFileSync(registryPath, "utf8"));
 }
 
