@@ -44,7 +44,7 @@ in order of preference, and `leeway pools reset` goes back to the default pool, 
 they sit in the registry as a top-level `pools` list of `{ start, end }` beside `folders`, so every repo shares them, and a repo can't
 claim ports the machine doesn't allow. The default pool is above the low ports products use and clear of the earlier `dev-ports` layouts
 (20020-21999), so old and new tooling run side by side. A range never spans two pools, even adjacent ones, so every range sits inside a
-band the owner set. Pools that are not integers 1-65535, a start above its end, no pools or overlapping pools are refused by
+pool the owner set. Pools that are not integers 1-65535, a start above its end, no pools or overlapping pools are refused by
 `pools set` before anything is written, and the same pools read back from the registry make claims fail with a message to fix them rather
 than guess. Setting or resetting the pools moves and warns about no range: a range outside every pool still holds its ports and is listed
 and killed, but its folder's next claim moves it into a pool, with the usual warning. Older leeways ignore `pools` and claim in the default

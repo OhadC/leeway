@@ -1,5 +1,6 @@
 import type { PortListener } from "./listener-scan.ts";
-import { RangeRegistry, type Pool, type RangeEntry } from "./range-registry.ts";
+import { type Pool, Pools } from "./pools.ts";
+import { RangeRegistry, type RangeEntry } from "./range-registry.ts";
 
 export type ListedRange = Omit<RangeEntry, "ports"> & {
     ports: ListedPort[];
@@ -34,7 +35,7 @@ export class RangeListing {
             }));
 
         const orphans = listeners.filter(
-            listener => RangeRegistry.isInPools(listener.port, pools) && !RangeRegistry.entryOfPort(entries, listener.port),
+            listener => Pools.holds(pools, listener.port) && !RangeRegistry.entryOfPort(entries, listener.port),
         );
 
         return { ranges, orphans };
@@ -42,7 +43,7 @@ export class RangeListing {
 
     static render({ ranges, orphans }: Listing, pools: Pool[]): string {
         if (ranges.length === 0 && orphans.length === 0) {
-            return `leeway: no ranges are registered and nothing is listening in ${RangeRegistry.textOfPools(pools)}\n`;
+            return `leeway: no ranges are registered and nothing is listening in ${Pools.text(pools)}\n`;
         }
 
         const blocks = ranges.map(RangeListing.renderRange);

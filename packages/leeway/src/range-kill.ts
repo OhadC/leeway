@@ -1,5 +1,6 @@
 import type { PortListener } from "./listener-scan.ts";
-import { RangeRegistry, type Pool, type RangeEntry } from "./range-registry.ts";
+import { type Pool, Pools } from "./pools.ts";
+import { RangeRegistry, type RangeEntry } from "./range-registry.ts";
 
 export type KillPlan = {
     scope: string;
@@ -24,16 +25,18 @@ export class RangeKill {
         return RangeKill.planOfEntry(entry, listeners);
     }
 
-    static planOfPort(entries: RangeEntry[], listeners: PortListener[], port: number, pools: Pool[]): KillPlan {
+    static planOfPort(entries: RangeEntry[], listeners: PortListener[], port: number, readPools: () => Pool[]): KillPlan {
         const entry = RangeRegistry.entryOfPort(entries, port);
 
         if (entry) {
             return RangeKill.planOfEntry(entry, listeners);
         }
 
-        if (!RangeRegistry.isInPools(port, pools)) {
+        const pools = readPools();
+
+        if (!Pools.holds(pools, port)) {
             throw new Error(
-                `leeway: port ${port} is in no range and outside every pool (${RangeRegistry.textOfPools(pools)}); leeway only kills in ranges and pools`,
+                `leeway: port ${port} is in no range and outside every pool (${Pools.text(pools)}); leeway only kills in ranges and pools`,
             );
         }
 

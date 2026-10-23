@@ -528,7 +528,7 @@ describe("RangeRegistry pools", () => {
         const folders = { "/repo": { start: 21000, end: 21000, ports: { PORT_A: 21000 }, label: "web" }, "/no-range": "21000" };
         const registryPath = createRegistryPath({ version: 7, profiles: { web: 1 }, folders });
 
-        await RangeRegistry.setPools(registryPath, ["21000-29999", "3000-3999"]);
+        await RangeRegistry.setPools(["21000-29999", "3000-3999"], registryPath);
         const afterSet = readRegistry(registryPath);
         await RangeRegistry.resetPools(registryPath);
 
@@ -544,20 +544,28 @@ describe("RangeRegistry pools", () => {
         expect(readRegistry(registryPath)).toEqual({ version: 7, profiles: { web: 1 }, folders });
     });
 
-    it("reads back the pools that were set, and none before", async () => {
+    it("resets without writing a registry when there is none", async () => {
+        const registryPath = createRegistryPath();
+
+        await RangeRegistry.resetPools(registryPath);
+
+        expect(fs.existsSync(registryPath)).toBe(false);
+    });
+
+    it("reads back the pools that were set, and the default pool before", async () => {
         const registryPath = createRegistryPath();
 
         const before = RangeRegistry.pools(registryPath);
-        await RangeRegistry.setPools(registryPath, ["3000-3999"]);
+        await RangeRegistry.setPools(["3000-3999"], registryPath);
 
-        expect(before).toBeUndefined();
+        expect(before).toEqual([{ start: 21000, end: 29999 }]);
         expect(RangeRegistry.pools(registryPath)).toEqual([{ start: 3000, end: 3999 }]);
     });
 
     it("accepts adjacent pools and keeps them apart", async () => {
         const registryPath = createRegistryPath();
 
-        await RangeRegistry.setPools(registryPath, ["4000-4999", "3000-3999"]);
+        await RangeRegistry.setPools(["4000-4999", "3000-3999"], registryPath);
 
         expect(RangeRegistry.pools(registryPath)).toEqual([
             { start: 4000, end: 4999 },
@@ -568,7 +576,7 @@ describe("RangeRegistry pools", () => {
     it("replaces pools that are unreadable", async () => {
         const registryPath = createRegistryPath({ version: 1, pools: "3000-3999", folders: {} });
 
-        await RangeRegistry.setPools(registryPath, ["3000-3999"]);
+        await RangeRegistry.setPools(["3000-3999"], registryPath);
 
         expect(RangeRegistry.pools(registryPath)).toEqual([{ start: 3000, end: 3999 }]);
     });
@@ -587,7 +595,7 @@ describe("RangeRegistry pools", () => {
         const registryPath = createRegistryPath({ version: 1, pools: [{ start: 5000, end: 5999 }], folders: {} });
         const before = fs.readFileSync(registryPath, "utf8");
 
-        await expect(RangeRegistry.setPools(registryPath, pools)).rejects.toThrow(/^leeway: /);
+        await expect(RangeRegistry.setPools(pools, registryPath)).rejects.toThrow(/^leeway: /);
         expect(fs.readFileSync(registryPath, "utf8")).toBe(before);
     });
 
@@ -596,7 +604,7 @@ describe("RangeRegistry pools", () => {
         const holder = heldClaim(registryPath, "/holder");
         await holder.locked;
 
-        const setting = settledFlag(RangeRegistry.setPools(registryPath, ["3000-3999"]));
+        const setting = settledFlag(RangeRegistry.setPools(["3000-3999"], registryPath));
         await pause(200);
         const whileLocked = setting.settled();
         holder.finish();
@@ -731,24 +739,6 @@ describe("RangeRegistry lookups", () => {
     it("finds the entry whose range holds a port", () => {
         expect(RangeRegistry.entryOfPort([repo, other], 21002)).toBe(other);
         expect(RangeRegistry.entryOfPort([repo, other], 21003)).toBeUndefined();
-    });
-
-    it("tells whether a port is in any pool", () => {
-        const pools = [
-            { start: 3000, end: 3999 },
-            { start: 21000, end: 29999 },
-        ];
-
-        expect([2999, 3000, 3999, 4000, 20999, 21000, 29999, 30000].map(port => RangeRegistry.isInPools(port, pools))).toEqual([
-            false,
-            true,
-            true,
-            false,
-            false,
-            true,
-            true,
-            false,
-        ]);
     });
 });
 

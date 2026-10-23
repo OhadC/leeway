@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 import fs from "node:fs";
-import os from "node:os";
 import { ConfigFile, type FoundConfig } from "./config-file.ts";
 import { devPorts } from "./dev-ports.ts";
 import { ExecCommand, type ExecMode, type ExecRequest } from "./exec-command.ts";
 import { FolderRange } from "./folder-range.ts";
 import { ListenerScan } from "./listener-scan.ts";
+import { Pools } from "./pools.ts";
 import { ProcessTree } from "./process-tree.ts";
 import { RangeKill } from "./range-kill.ts";
 import { RangeListing } from "./range-listing.ts";
-import { type Pool, RangeRegistry } from "./range-registry.ts";
+import { RangeRegistry } from "./range-registry.ts";
 import { RunWithPorts } from "./run-with-ports.ts";
 
 const USAGE = [
@@ -40,17 +40,17 @@ async function runLeeway(): Promise<void> {
     } else if (subcommand === "env" && rest.length === 1 && rest[0] === "--export") {
         await printExportLines(ConfigFile.find(process.cwd()));
     } else if (subcommand === "list" && (rest.length === 0 || (rest.length === 1 && rest[0] === "--json"))) {
-        const pools = machinePools();
+        const pools = RangeRegistry.pools();
         const listing = RangeListing.collect(RangeRegistry.livingEntries(), ListenerScan.listeners(), pools);
 
         process.stdout.write(rest.length === 0 ? RangeListing.render(listing, pools) : `${JSON.stringify(listing, undefined, 4)}\n`);
     } else if (subcommand === "kill" && rest.length <= 1 && rest.every(arg => /^\d+$/.test(arg))) {
         killRange(rest[0]);
     } else if (subcommand === "pools" && rest[0] === "set") {
-        await RangeRegistry.setPools(RangeRegistry.defaultPath(os.homedir()), rest.slice(1));
+        await RangeRegistry.setPools(rest.slice(1));
         printPools();
     } else if (subcommand === "pools" && rest.length === 1 && rest[0] === "reset") {
-        await RangeRegistry.resetPools(RangeRegistry.defaultPath(os.homedir()));
+        await RangeRegistry.resetPools();
         printPools();
     } else if (subcommand === "pools" && rest.length === 0) {
         printPools();
@@ -114,7 +114,7 @@ function killRange(port: string | undefined): void {
     const plan =
         port === undefined
             ? RangeKill.planOfFolder(entries, listeners, ConfigFile.find(process.cwd()).folder, process.platform)
-            : RangeKill.planOfPort(entries, listeners, Number(port), machinePools());
+            : RangeKill.planOfPort(entries, listeners, Number(port), () => RangeRegistry.pools());
     const failures = ProcessTree.killTrees(
         plan.targets.map(target => target.pid),
         plan.withRuns,
@@ -127,17 +127,8 @@ function killRange(port: string | undefined): void {
     }
 }
 
-function machinePools(): Pool[] {
-    return RangeRegistry.pools() ?? [RangeRegistry.DEFAULT_POOL];
-}
-
 function printPools(): void {
-    const pools = RangeRegistry.pools();
-    const lines = pools
-        ? pools.map(pool => `${pool.start}-${pool.end}`)
-        : [`${RangeRegistry.DEFAULT_POOL.start}-${RangeRegistry.DEFAULT_POOL.end} (the default pool)`];
-
-    process.stdout.write(lines.map(line => `${line}\n`).join(""));
+    process.stdout.write(Pools.render(RangeRegistry.pools()));
 }
 
 function failWith(message: string): never {

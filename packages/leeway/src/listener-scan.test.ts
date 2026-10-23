@@ -2,7 +2,7 @@ import net from "node:net";
 import { describe, expect, it } from "vitest";
 import { ListenerScan } from "./listener-scan.ts";
 import type { CommandRunner } from "./os-command.ts";
-import { RangeRegistry } from "./range-registry.ts";
+import { Pools } from "./pools.ts";
 
 const WINDOWS_NETSTAT = [
     "",
@@ -120,7 +120,7 @@ function printed(stdout: string): CommandRunner {
 
 async function listenInPool(): Promise<net.Server> {
     for (let attempt = 0; ; attempt++) {
-        const { start, end } = RangeRegistry.DEFAULT_POOL;
+        const { start, end } = Pools.DEFAULT[0]!;
         const port = start + Math.floor(Math.random() * (end - start + 1));
         const server = net.createServer();
 

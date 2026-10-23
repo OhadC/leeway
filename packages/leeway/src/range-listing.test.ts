@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { Pool, RangeEntry } from "./range-registry.ts";
+import { type Pool, Pools } from "./pools.ts";
+import type { RangeEntry } from "./range-registry.ts";
 import { RangeListing } from "./range-listing.ts";
 
 const APP: RangeEntry = { folder: "C:\\dev\\app", start: 21000, end: 21001, ports: { web: 21000, server: 21001 } };
 
 const TOOL: RangeEntry = { folder: "C:\\dev\\tool", start: 21002, end: 21002, ports: { docs: 21002 } };
 
-const DEFAULT_POOLS: Pool[] = [{ start: 21000, end: 29999 }];
-
 describe("RangeListing.collect", () => {
     it("lists every range by start with the pid listening on each named port", () => {
-        const listing = RangeListing.collect([TOOL, APP], [{ port: 21001, pid: 40 }], DEFAULT_POOLS);
+        const listing = RangeListing.collect([TOOL, APP], [{ port: 21001, pid: 40 }], Pools.DEFAULT);
 
         expect(listing.ranges).toEqual([
             {
@@ -33,11 +32,11 @@ describe("RangeListing.collect", () => {
                 { port: 21002, pid: 60 },
                 { port: 21002, pid: 61 },
             ],
-            DEFAULT_POOLS,
+            Pools.DEFAULT,
         );
 
         expect(listing.ranges[0]?.ports).toEqual([{ name: "docs", port: 21002, pids: [60, 61] }]);
-        expect(RangeListing.render(listing, DEFAULT_POOLS)).toContain("  docs  21002  pid 60, 61\n");
+        expect(RangeListing.render(listing, Pools.DEFAULT)).toContain("  docs  21002  pid 60, 61\n");
     });
 
     it("reports listeners in every pool outside every range as orphans and ignores listeners outside every pool", () => {
@@ -68,7 +67,7 @@ describe("RangeListing.collect", () => {
     it("lists a range outside every pool with its listeners, which are not orphans", () => {
         const outside: RangeEntry = { folder: "C:\\dev\\outside", start: 3000, end: 3001, ports: { web: 3000, api: 3001 } };
 
-        const listing = RangeListing.collect([outside], [{ port: 3001, pid: 70 }], DEFAULT_POOLS);
+        const listing = RangeListing.collect([outside], [{ port: 3001, pid: 70 }], Pools.DEFAULT);
 
         expect(listing).toEqual({
             ranges: [
@@ -89,9 +88,9 @@ describe("RangeListing.collect", () => {
 
 describe("RangeListing.render", () => {
     it("prints a range whose ports are unreadable as its folder and span only", () => {
-        const listing = RangeListing.collect([{ folder: "C:\\dev\\newer", start: 21010, end: 21011, ports: {} }], [], DEFAULT_POOLS);
+        const listing = RangeListing.collect([{ folder: "C:\\dev\\newer", start: 21010, end: 21011, ports: {} }], [], Pools.DEFAULT);
 
-        expect(RangeListing.render(listing, DEFAULT_POOLS)).toBe("C:\\dev\\newer  21010-21011\n");
+        expect(RangeListing.render(listing, Pools.DEFAULT)).toBe("C:\\dev\\newer  21010-21011\n");
     });
 
     it("prints each range as a table of names, ports and pids, then the orphans", () => {
@@ -101,10 +100,10 @@ describe("RangeListing.render", () => {
                 { port: 21001, pid: 40 },
                 { port: 25000, pid: 50 },
             ],
-            DEFAULT_POOLS,
+            Pools.DEFAULT,
         );
 
-        expect(RangeListing.render(listing, DEFAULT_POOLS)).toBe(
+        expect(RangeListing.render(listing, Pools.DEFAULT)).toBe(
             [
                 "C:\\dev\\app  21000-21001",
                 "  web     21000  -",

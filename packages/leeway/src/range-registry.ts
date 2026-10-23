@@ -3,6 +3,7 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { type Pool, Pools } from "./pools.ts";
 
 export type RangeEntry = {
     folder: string;
@@ -14,11 +15,6 @@ export type RangeEntry = {
 export type RangeClaim = {
     entry: RangeEntry;
     previous: RangeEntry | undefined;
-};
-
-export type Pool = {
-    start: number;
-    end: number;
 };
 
 export type PortBindState = "free" | "in-use" | "unavailable";
@@ -51,7 +47,6 @@ type RegistryFile = {
 };
 
 export class RangeRegistry {
-    static readonly DEFAULT_POOL: Pool = { start: 21000, end: 29999 };
     private static readonly VERSION = 1;
 
     static defaultPath(home: string): string {
@@ -62,29 +57,25 @@ export class RangeRegistry {
         return RangeRegistry.whileLocked(options.registryPath, options.now, () => RangeRegistry.claimLocked(options));
     }
 
-    static pools(registryPath = RangeRegistry.defaultPath(os.homedir())): Pool[] | undefined {
+    static pools(registryPath = RangeRegistry.defaultPath(os.homedir())): Pool[] {
         return RangeRegistry.poolsOf(RangeRegistry.read(registryPath), registryPath);
     }
 
-    static async setPools(registryPath: string, texts: readonly string[]): Promise<void> {
-        const pools = texts.map(poolOfText);
-        const problem = poolsProblem(pools);
-
-        if (problem) {
-            throw new Error(`leeway: ${problem}`);
-        }
+    static async setPools(texts: readonly string[], registryPath = RangeRegistry.defaultPath(os.homedir())): Promise<void> {
+        const pools = Pools.ofTexts(texts);
 
         await RangeRegistry.whileLocked(registryPath, Date.now, () =>
             RangeRegistry.write(registryPath, { ...RangeRegistry.read(registryPath), pools }),
         );
     }
 
-    static async resetPools(registryPath: string): Promise<void> {
+    static async resetPools(registryPath = RangeRegistry.defaultPath(os.homedir())): Promise<void> {
         await RangeRegistry.whileLocked(registryPath, Date.now, () => {
-            const registry = RangeRegistry.read(registryPath);
+            const { pools, ...registry } = RangeRegistry.read(registryPath);
 
-            delete registry.pools;
-            RangeRegistry.write(registryPath, registry);
+            if (pools !== undefined) {
+                RangeRegistry.write(registryPath, registry);
+            }
         });
     }
 
@@ -123,14 +114,6 @@ export class RangeRegistry {
         return entries.find(entry => port >= entry.start && port <= entry.end);
     }
 
-    static isInPools(port: number, pools: Pool[]): boolean {
-        return pools.some(pool => port >= pool.start && port <= pool.end);
-    }
-
-    static textOfPools(pools: Pool[]): string {
-        return pools.map(textOfPool).join(", ");
-    }
-
     private static folderKey(folder: string, platform: NodeJS.Platform): string {
         return platform === "win32" ? path.win32.resolve(folder).toLowerCase() : path.posix.resolve(folder);
     }
@@ -145,7 +128,7 @@ export class RangeRegistry {
     }: ClaimRangeOptions): Promise<RangeClaim> {
         const folder = RangeRegistry.folderKey(folderPath, platform);
         const registry = RangeRegistry.read(registryPath);
-        const pools = RangeRegistry.poolsOf(registry, registryPath) ?? [RangeRegistry.DEFAULT_POOL];
+        const pools = RangeRegistry.poolsOf(registry, registryPath);
         const entries = Object.entries(registry.folders);
         const isOwn = ([key]: [string, unknown]) => RangeRegistry.folderKey(key, platform) === folder;
         const own = entries.filter(isOwn);
@@ -158,7 +141,7 @@ export class RangeRegistry {
 
         if (!range) {
             throw new Error(
-                `leeway: no room for ${names.length} ports in ${RangeRegistry.textOfPools(pools)}; remove unused folders' ranges from ${registryPath} and try again`,
+                `leeway: no room for ${names.length} ports in ${Pools.text(pools)}; remove unused folders' ranges from ${registryPath} and try again`,
             );
         }
 
@@ -295,12 +278,12 @@ export class RangeRegistry {
         return { ...registry, folders: registry.folders };
     }
 
-    private static poolsOf(registry: RegistryFile, registryPath: string): Pool[] | undefined {
+    private static poolsOf(registry: RegistryFile, registryPath: string): Pool[] {
         if (!("pools" in registry)) {
-            return undefined;
+            return Pools.DEFAULT;
         }
 
-        const problem = poolsProblem(registry.pools);
+        const problem = Pools.problem(registry.pools);
 
         if (problem) {
             throw new Error(
@@ -341,7 +324,7 @@ export class RangeRegistry {
     ): Promise<number | undefined> {
         const end = start + size - 1;
 
-        if (!pools.some(pool => pool.start <= start && end <= pool.end)) {
+        if (!Pools.holds(pools, start, end)) {
             return end;
         }
 
@@ -377,50 +360,6 @@ export class RangeRegistry {
         fs.writeFileSync(temporaryPath, `${JSON.stringify(registry, undefined, 4)}\n`);
         fs.renameSync(temporaryPath, registryPath);
     }
-}
-
-function poolsProblem(pools: unknown): string | undefined {
-    if (!Array.isArray(pools) || pools.length === 0) {
-        return "at least one pool is needed, written start-end";
-    }
-
-    const unreadable = pools.find(pool => !isObject(pool) || !isPortNumber(pool.start) || !isPortNumber(pool.end));
-
-    if (unreadable !== undefined) {
-        return `${labelOfPool(unreadable)} is not a pool of ports 1-65535`;
-    }
-
-    const readable = pools as Pool[];
-    const reversed = readable.find(pool => pool.start > pool.end);
-
-    if (reversed) {
-        return `${textOfPool(reversed)} starts after it ends`;
-    }
-
-    const byStart = [...readable].sort((left, right) => left.start - right.start);
-    const overlapping = byStart.findIndex((pool, index) => index > 0 && pool.start <= byStart[index - 1]!.end);
-
-    return overlapping === -1 ? undefined : `${textOfPool(byStart[overlapping - 1]!)} and ${textOfPool(byStart[overlapping]!)} overlap`;
-}
-
-function poolOfText(text: string): Pool {
-    const match = /^(\d+)-(\d+)$/.exec(text);
-
-    if (!match) {
-        throw new Error(`leeway: ${text} is not a pool; write it start-end, like 21000-29999`);
-    }
-
-    return { start: Number(match[1]), end: Number(match[2]) };
-}
-
-function labelOfPool(value: unknown): string {
-    return isObject(value) && typeof value.start === "number" && typeof value.end === "number"
-        ? textOfPool({ start: value.start, end: value.end })
-        : JSON.stringify(value);
-}
-
-function textOfPool({ start, end }: Pool): string {
-    return `${start}-${end}`;
 }
 
 function parseJson(text: string): unknown {

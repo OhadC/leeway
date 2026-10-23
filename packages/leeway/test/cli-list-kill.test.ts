@@ -141,6 +141,20 @@ describe("leeway list and kill", () => {
         expect(await accepts(ports.PORT_WEB)).toBe(false);
     }, 60_000);
 
+    it("kills the range holding a given port while the pools are unreadable, and refuses an orphan port", () => {
+        const { dir, home, ports } = claimedFolder();
+        const registryPath = path.join(home, ".leeway", "ranges.json");
+        fs.writeFileSync(registryPath, JSON.stringify({ ...JSON.parse(fs.readFileSync(registryPath, "utf8")), pools: "41000-41999" }));
+
+        const inRange = LeewayCli.run(["kill", String(ports.PORT_API)], home, home);
+        const orphan = LeewayCli.run(["kill", String((ports.PORT_API ?? 0) + 100)], home, home);
+
+        expect(inRange.status).toBe(0);
+        expect(inRange.stdout).toBe(`leeway: nothing is listening in ${shown(dir)}  ${ports.PORT_WEB}-${ports.PORT_API}\n`);
+        expect(orphan.status).toBe(1);
+        expect(orphan.stderr).toMatch(/^leeway: the pools in .*; fix it/);
+    }, 60_000);
+
     it("says so when nothing listens in the range", () => {
         const { dir, home, ports } = claimedFolder();
 
