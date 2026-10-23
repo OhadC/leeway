@@ -1,0 +1,41 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "leeway.json",
+    "description": "The leeway config: the catalogue of ports this repo's dev setup uses, plus the settings that apply to it.",
+    "type": "object",
+    "required": ["ports"],
+    "additionalProperties": false,
+    "properties": {
+        "$schema": {
+            "description": "The JSON schema this config follows; leeway ignores it.",
+            "type": "string"
+        },
+        "ports": {
+            "description": "The catalogue: every port the dev setup uses, keyed by port name. Each port name is also the environment variable its port travels in.",
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": {
+                "description": "A port name: letters, digits and _, not starting with a digit.",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "additionalProperties": {
+                "description": "A catalogue entry. Any properties besides port are yours; leeway ignores them.",
+                "type": "object",
+                "required": ["port"],
+                "properties": {
+                    "port": {
+                        "description": "The default port: the port this entry uses when no range applies.",
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 65535
+                    }
+                }
+            }
+        },
+        "agentGuard": {
+            "description": "Refuse default ports to agent shells that have no ports of their own.",
+            "type": "boolean",
+            "default": false
+        }
+    }
+}

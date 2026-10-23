@@ -37,6 +37,13 @@ describe("ConfigFile.find", () => {
         expect(ConfigFile.find(folder).config.agentGuard).toBe(true);
     });
 
+    it("accepts a $schema pointing at the shipped schema", () => {
+        const folder = tempFolder();
+        writeConfig(folder, { $schema: "./node_modules/leeway/schema.json", ports: { PORT_APP: { port: 3000 } } });
+
+        expect(ConfigFile.find(folder).config.ports).toEqual({ PORT_APP: { port: 3000 } });
+    });
+
     it("refuses, naming the starting folder, when no folder above it has a config", () => {
         const folder = tempFolder();
 
@@ -77,8 +84,16 @@ describe("ConfigFile.find", () => {
         writeConfig(folder, { ports: { PORT_APP: { port: 3000 } }, agentGaurd: true });
 
         expect(() => ConfigFile.find(folder)).toThrowError(
-            `leeway: "agentGaurd" in ${path.join(folder, "leeway.json")} is not a setting (ports, agentGuard)`,
+            `leeway: "agentGaurd" in ${path.join(folder, "leeway.json")} is not a setting (ports, agentGuard, $schema)`,
         );
+    });
+
+    it("accepts exactly the settings the shipped schema describes", () => {
+        const folder = tempFolder();
+        writeConfig(folder, { ports: { PORT_APP: { port: 3000 } }, unknown: true });
+        const schema = JSON.parse(fs.readFileSync(new URL("../schema.json", import.meta.url), "utf8"));
+
+        expect(settingsListedWhenRefusing(folder).toSorted()).toEqual(Object.keys(schema.properties).toSorted());
     });
 
     it("refuses an agent guard setting that is not a boolean", () => {
@@ -144,6 +159,20 @@ function tempFolder(): string {
     folders.push(folder);
 
     return folder;
+}
+
+function settingsListedWhenRefusing(folder: string): string[] {
+    try {
+        ConfigFile.find(folder);
+    } catch (error) {
+        const listed = /is not a setting \((.*)\)$/.exec((error as Error).message)?.[1];
+
+        if (listed !== undefined) {
+            return listed.split(", ");
+        }
+    }
+
+    throw new Error(`${folder} was not refused as an unknown setting`);
 }
 
 function writeConfig(folder: string, content: unknown): void {

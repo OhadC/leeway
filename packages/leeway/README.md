@@ -35,6 +35,7 @@ ignores them.
 
 ```json
 {
+    "$schema": "./node_modules/leeway/schema.json",
     "ports": {
         "PORT_WEB": { "port": 5173 },
         "PORT_API": { "port": 3001, "description": "mock api" }
@@ -47,6 +48,7 @@ ignores them.
 | ------------ | ------- | ---------------------------------------------------------------------- |
 | `ports`      | -       | the catalogue; required                                                |
 | `agentGuard` | `false` | refuse default ports to agent shells (see [Agent guard](#agent-guard)) |
+| `$schema`    | -       | the JSON schema leeway ships, for editor completion and validation     |
 
 Unknown settings are refused, so a typo fails loudly.
 

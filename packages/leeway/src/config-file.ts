@@ -5,7 +5,7 @@ import { ExecCommand } from "./exec-command.ts";
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-const SETTINGS = ["ports", "agentGuard"];
+const SETTINGS = ["ports", "agentGuard", "$schema"];
 
 const PORTS_SHAPE = '{ "NAME": { "port": <integer 1-65535> } }';
 

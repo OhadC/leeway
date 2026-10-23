@@ -15,7 +15,8 @@
         "node": ">=22.18"
     },
     "files": [
-        "dist"
+        "dist",
+        "schema.json"
     ],
     "bin": {
         "leeway": "./dist/cli.mjs"
