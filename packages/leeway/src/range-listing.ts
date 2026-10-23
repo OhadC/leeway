@@ -1,12 +1,6 @@
 import type { PortListener } from "./listener-scan.ts";
 import { RangeRegistry, type RangeEntry } from "./range-registry.ts";
 
-type ListedPort = {
-    name: string;
-    port: number;
-    pids: number[];
-};
-
 export type ListedRange = Omit<RangeEntry, "ports"> & {
     ports: ListedPort[];
 };
@@ -14,6 +8,12 @@ export type ListedRange = Omit<RangeEntry, "ports"> & {
 export type Listing = {
     ranges: ListedRange[];
     orphans: PortListener[];
+};
+
+type ListedPort = {
+    name: string;
+    port: number;
+    pids: number[];
 };
 
 export class RangeListing {

@@ -20,10 +20,12 @@ export function devPorts<T extends LeewayConfig>(config: T, env: LeewayEnv = cur
         throw new Error("leeway: agent shell detected without leeway ports; run through `leeway <command>` or `leeway env --export`");
     }
 
-    return Object.fromEntries(Object.entries(catalogue).map(([name, { port }]) => [name, configuredPort(env[name]) ?? port])) as PortsOf<T>;
+    return Object.fromEntries(
+        Object.entries(catalogue).map(([name, { port }]) => [name, environmentPort(env[name]) ?? port]),
+    ) as PortsOf<T>;
 }
 
-function configuredPort(value: string | number | undefined): number | undefined {
+function environmentPort(value: string | number | undefined): number | undefined {
     const port = Number(value);
 
     return value !== "" && Number.isInteger(port) && port > 0 && port <= 65535 ? port : undefined;
