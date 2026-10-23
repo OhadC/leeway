@@ -1,16 +1,16 @@
 import type { PortListener } from "./listener-scan.ts";
 import { RangeRegistry, type RangeEntry } from "./range-registry.ts";
 
-type KillTarget = {
-    pid: number;
-    ports: number[];
-};
-
 export type KillPlan = {
     scope: string;
     names: Record<string, number>;
     targets: KillTarget[];
     withRuns: boolean;
+};
+
+type KillTarget = {
+    pid: number;
+    ports: number[];
 };
 
 export class RangeKill {
