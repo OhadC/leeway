@@ -17,11 +17,13 @@ const ORDINARY_WORDS = new Set([
     "worktree",
     "lockfile",
 ]);
+const LOOKALIKES = new Set(["windows"]);
 const ALLOWED: Record<string, string[]> = {
     "GLOSSARY.md": ["*"],
     "scripts/check-terms.ts": ["*"],
     "packages/leeway/src/vite.ts": ["root"],
     "packages/leeway/src/vite.test.ts": ["root"],
+    "packages/leeway/test/leeway-cli.ts": ["window"],
 };
 
 const repoDir = path.resolve(import.meta.dirname, "..");
@@ -49,8 +51,8 @@ for (const file of files) {
         .split("\n")
         .forEach((line, index) => {
             const prose = file.endsWith(".md") ? line.replace(/`[^`]*`/g, " ") : line;
-            for (const [, term] of wordsOf(prose).matchAll(pattern)) {
-                if (!allowed.includes(term!)) {
+            for (const [word, term] of wordsOf(prose).matchAll(pattern)) {
+                if (!allowed.includes(term!) && !LOOKALIKES.has(word)) {
                     console.error(`${file}:${index + 1}: "${term}" is a GLOSSARY.md _Avoid_ term`);
                     process.exitCode = 1;
                 }

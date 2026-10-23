@@ -16,6 +16,11 @@ export type RangeClaim = {
     previous: RangeEntry | undefined;
 };
 
+export type Pool = {
+    start: number;
+    end: number;
+};
+
 export type PortBindState = "free" | "in-use" | "unavailable";
 
 export type ClaimRangeOptions = {
@@ -48,22 +53,41 @@ type RegistryFile = {
 export class RangeRegistry {
     static readonly POOL_START = 21000;
     static readonly POOL_END = 29999;
+    static readonly DEFAULT_POOL: Pool = { start: RangeRegistry.POOL_START, end: RangeRegistry.POOL_END };
     private static readonly VERSION = 1;
 
     static defaultPath(home: string): string {
         return path.join(home, ".leeway", "ranges.json");
     }
 
-    static async claim(options: ClaimRangeOptions): Promise<RangeClaim> {
-        const lockPath = `${options.registryPath}.lock`;
+    static claim(options: ClaimRangeOptions): Promise<RangeClaim> {
+        return RangeRegistry.whileLocked(options.registryPath, options.now, () => RangeRegistry.claimLocked(options));
+    }
 
-        const owner = await RangeRegistry.acquireLock(lockPath, options.now);
+    static pools(registryPath = RangeRegistry.defaultPath(os.homedir())): Pool[] | undefined {
+        return RangeRegistry.poolsOf(RangeRegistry.read(registryPath), registryPath);
+    }
 
-        try {
-            return await RangeRegistry.claimLocked(options);
-        } finally {
-            RangeRegistry.releaseLock(lockPath, owner);
+    static async setPools(registryPath: string, texts: readonly string[]): Promise<void> {
+        const pools = texts.map(poolOfText);
+        const problem = poolsProblem(pools);
+
+        if (problem) {
+            throw new Error(`leeway: ${problem}`);
         }
+
+        await RangeRegistry.whileLocked(registryPath, Date.now, () =>
+            RangeRegistry.write(registryPath, { ...RangeRegistry.read(registryPath), pools }),
+        );
+    }
+
+    static async resetPools(registryPath: string): Promise<void> {
+        await RangeRegistry.whileLocked(registryPath, Date.now, () => {
+            const registry = RangeRegistry.read(registryPath);
+
+            delete registry.pools;
+            RangeRegistry.write(registryPath, registry);
+        });
     }
 
     static async testPort(port: number): Promise<PortBindState> {
@@ -119,19 +143,20 @@ export class RangeRegistry {
     }: ClaimRangeOptions): Promise<RangeClaim> {
         const folder = RangeRegistry.folderKey(folderPath, platform);
         const registry = RangeRegistry.read(registryPath);
+        const pools = RangeRegistry.poolsOf(registry, registryPath) ?? [RangeRegistry.DEFAULT_POOL];
         const entries = Object.entries(registry.folders);
         const isOwn = ([key]: [string, unknown]) => RangeRegistry.folderKey(key, platform) === folder;
         const own = entries.filter(isOwn);
         const [current] = RangeRegistry.readableRanges(own);
         const ownKeys = Object.fromEntries(own.flatMap(([, value]) => (isObject(value) ? Object.entries(value) : [])));
         const others = entries.filter(pair => !isOwn(pair));
-        const kept = current && (await RangeRegistry.keep(current, names, RangeRegistry.readableRanges(others), testPort));
+        const kept = current && (await RangeRegistry.keep(current, names, RangeRegistry.readableRanges(others), pools, testPort));
         const living = kept ? others : others.filter(([key]) => pathExists(key));
-        const range = kept ?? (await RangeRegistry.place(current, RangeRegistry.readableRanges(living), names, testPort));
+        const range = kept ?? (await RangeRegistry.place(current, RangeRegistry.readableRanges(living), names, pools, testPort));
 
         if (!range) {
             throw new Error(
-                `leeway: no room for ${names.length} ports in ${RangeRegistry.POOL_START}-${RangeRegistry.POOL_END}; remove unused folders' ranges from ${registryPath} and try again`,
+                `leeway: no room for ${names.length} ports in ${pools.map(textOfPool).join(", ")}; remove unused folders' ranges from ${registryPath} and try again`,
             );
         }
 
@@ -141,6 +166,17 @@ export class RangeRegistry {
         });
 
         return { entry: { folder, ...range }, previous: current && { folder, ...current } };
+    }
+
+    private static async whileLocked<T>(registryPath: string, now: ClaimRangeOptions["now"], action: () => T | Promise<T>): Promise<T> {
+        const lockPath = `${registryPath}.lock`;
+        const owner = await RangeRegistry.acquireLock(lockPath, now);
+
+        try {
+            return await action();
+        } finally {
+            RangeRegistry.releaseLock(lockPath, owner);
+        }
     }
 
     private static async acquireLock(lockPath: string, now: ClaimRangeOptions["now"]): Promise<string> {
@@ -196,10 +232,11 @@ export class RangeRegistry {
         current: StoredRange,
         names: readonly string[],
         stored: StoredRange[],
+        pools: Pool[],
         testPort: ClaimRangeOptions["testPort"],
     ): Promise<StoredRange | undefined> {
         const ownPorts = new Set(Object.values(current.ports));
-        const blocked = await RangeRegistry.firstBlockedPort(current.start, names.length, stored, ownPorts, testPort);
+        const blocked = await RangeRegistry.firstBlockedPort(current.start, names.length, stored, pools, ownPorts, testPort);
 
         return blocked === undefined ? RangeRegistry.rangeAt(current.start, names) : undefined;
     }
@@ -208,23 +245,27 @@ export class RangeRegistry {
         current: StoredRange | undefined,
         occupied: StoredRange[],
         names: readonly string[],
+        pools: Pool[],
         testPort: ClaimRangeOptions["testPort"],
     ): Promise<StoredRange | undefined> {
         const ownPorts = new Set(Object.values(current?.ports ?? {}));
-        const firstBlockedPort = (start: number) => RangeRegistry.firstBlockedPort(start, names.length, occupied, ownPorts, testPort);
+        const firstBlockedPort = (start: number) =>
+            RangeRegistry.firstBlockedPort(start, names.length, occupied, pools, ownPorts, testPort);
 
         if (current && (await firstBlockedPort(current.start)) === undefined) {
             return RangeRegistry.rangeAt(current.start, names);
         }
 
-        for (let start = RangeRegistry.POOL_START; start + names.length - 1 <= RangeRegistry.POOL_END;) {
-            const blocked = await firstBlockedPort(start);
+        for (const pool of pools) {
+            for (let start = pool.start; start + names.length - 1 <= pool.end;) {
+                const blocked = await firstBlockedPort(start);
 
-            if (blocked === undefined) {
-                return RangeRegistry.rangeAt(start, names);
+                if (blocked === undefined) {
+                    return RangeRegistry.rangeAt(start, names);
+                }
+
+                start = blocked + 1;
             }
-
-            start = blocked + 1;
         }
 
         return undefined;
@@ -252,6 +293,22 @@ export class RangeRegistry {
         return { ...registry, folders: registry.folders };
     }
 
+    private static poolsOf(registry: RegistryFile, registryPath: string): Pool[] | undefined {
+        if (!("pools" in registry)) {
+            return undefined;
+        }
+
+        const problem = poolsProblem(registry.pools);
+
+        if (problem) {
+            throw new Error(
+                `leeway: the pools in ${registryPath} are unreadable (${problem}); fix it with leeway pools set or leeway pools reset`,
+            );
+        }
+
+        return registry.pools as Pool[];
+    }
+
     private static readableRanges(pairs: [string, unknown][]): StoredRange[] {
         return pairs.flatMap(([, value]) => RangeRegistry.readableRange(value) ?? []);
     }
@@ -276,12 +333,13 @@ export class RangeRegistry {
         start: number,
         size: number,
         occupied: StoredRange[],
+        pools: Pool[],
         ownPorts: Set<number>,
         testPort: ClaimRangeOptions["testPort"],
     ): Promise<number | undefined> {
         const end = start + size - 1;
 
-        if (!RangeRegistry.isInPool(start) || !RangeRegistry.isInPool(end)) {
+        if (!pools.some(pool => pool.start <= start && end <= pool.end)) {
             return end;
         }
 
@@ -317,6 +375,50 @@ export class RangeRegistry {
         fs.writeFileSync(temporaryPath, `${JSON.stringify(registry, undefined, 4)}\n`);
         fs.renameSync(temporaryPath, registryPath);
     }
+}
+
+function poolsProblem(pools: unknown): string | undefined {
+    if (!Array.isArray(pools) || pools.length === 0) {
+        return "at least one pool is needed, written start-end";
+    }
+
+    const unreadable = pools.find(pool => !isObject(pool) || !isPortNumber(pool.start) || !isPortNumber(pool.end));
+
+    if (unreadable !== undefined) {
+        return `${labelOfPool(unreadable)} is not a pool of ports 1-65535`;
+    }
+
+    const readable = pools as Pool[];
+    const reversed = readable.find(pool => pool.start > pool.end);
+
+    if (reversed) {
+        return `${textOfPool(reversed)} starts after it ends`;
+    }
+
+    const byStart = [...readable].sort((left, right) => left.start - right.start);
+    const overlapping = byStart.findIndex((pool, index) => index > 0 && pool.start <= byStart[index - 1]!.end);
+
+    return overlapping === -1 ? undefined : `${textOfPool(byStart[overlapping - 1]!)} and ${textOfPool(byStart[overlapping]!)} overlap`;
+}
+
+function poolOfText(text: string): Pool {
+    const match = /^(\d+)-(\d+)$/.exec(text);
+
+    if (!match) {
+        throw new Error(`leeway: ${text} is not a pool; write it start-end, like 21000-29999`);
+    }
+
+    return { start: Number(match[1]), end: Number(match[2]) };
+}
+
+function labelOfPool(value: unknown): string {
+    return isObject(value) && typeof value.start === "number" && typeof value.end === "number"
+        ? textOfPool({ start: value.start, end: value.end })
+        : JSON.stringify(value);
+}
+
+function textOfPool({ start, end }: Pool): string {
+    return `${start}-${end}`;
 }
 
 function parseJson(text: string): unknown {

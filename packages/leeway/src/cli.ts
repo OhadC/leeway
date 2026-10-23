@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import os from "node:os";
 import { ConfigFile, type FoundConfig } from "./config-file.ts";
 import { devPorts } from "./dev-ports.ts";
 import { ExecCommand, type ExecMode, type ExecRequest } from "./exec-command.ts";
@@ -17,10 +18,11 @@ const USAGE = [
     "       leeway env --export                             claim this folder's range and print it as export lines",
     "       leeway list [--json]                            show every range, the pids listening in it, and orphan listeners in the pool",
     "       leeway kill [<port>]                            kill what listens in this folder's range, or in the range holding <port>, or on an orphan <port>",
+    "       leeway pools [set <start-end>... | reset]       show the machine's pools, set them in order of preference, or go back to the default pool",
     "       leeway --help | -h | --version",
 ].join("\n");
 
-const SUBCOMMANDS = new Set(["env", "list", "kill"]);
+const SUBCOMMANDS = new Set(["env", "list", "kill", "pools"]);
 
 async function runLeeway(): Promise<void> {
     const args = process.argv.slice(2);
@@ -43,6 +45,14 @@ async function runLeeway(): Promise<void> {
         process.stdout.write(rest.length === 0 ? RangeListing.render(listing) : `${JSON.stringify(listing, undefined, 4)}\n`);
     } else if (subcommand === "kill" && rest.length <= 1 && rest.every(arg => /^\d+$/.test(arg))) {
         killRange(rest[0]);
+    } else if (subcommand === "pools" && rest[0] === "set") {
+        await RangeRegistry.setPools(RangeRegistry.defaultPath(os.homedir()), rest.slice(1));
+        printPools();
+    } else if (subcommand === "pools" && rest.length === 1 && rest[0] === "reset") {
+        await RangeRegistry.resetPools(RangeRegistry.defaultPath(os.homedir()));
+        printPools();
+    } else if (subcommand === "pools" && rest.length === 0) {
+        printPools();
     } else {
         failWith(USAGE);
     }
@@ -114,6 +124,15 @@ function killRange(port: string | undefined): void {
     if (failures.size > 0) {
         process.exit(1);
     }
+}
+
+function printPools(): void {
+    const pools = RangeRegistry.pools();
+    const lines = pools
+        ? pools.map(pool => `${pool.start}-${pool.end}`)
+        : [`${RangeRegistry.DEFAULT_POOL.start}-${RangeRegistry.DEFAULT_POOL.end} (the default pool)`];
+
+    process.stdout.write(lines.map(line => `${line}\n`).join(""));
 }
 
 function failWith(message: string): never {

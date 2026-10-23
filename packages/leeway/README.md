@@ -56,7 +56,8 @@ folder that owns the range. Commit it: every worktree gets its own copy and ther
 
 ## Ranges and the registry
 
-A folder's range is claimed from the pool 21000-29999 and recorded in the machine-wide registry `~/.leeway/ranges.json`, shared by every
+A folder's range is claimed from the machine's pools, the default pool 21000-29999 unless the machine's owner set others with
+[`leeway pools`](#leeway-pools-set-start-end--reset), and recorded in the machine-wide registry `~/.leeway/ranges.json`, shared by every
 repo on the machine:
 
 ```json
@@ -70,8 +71,9 @@ repo on the machine:
 ```
 
 - A range is exactly as wide as the catalogue; ports follow the catalogue's order.
-- A claim keeps the folder's current range whenever its ports are still free (or held by the folder's own running servers). Otherwise
-  it takes the lowest gap that overlaps no other range and whose ports can all be bound, and warns that the range moved.
+- A claim keeps the folder's current range whenever it sits inside one pool and its ports are still free (or held by the folder's own
+  running servers). Otherwise it takes the first gap, pools in the order they were set and each pool from low to high, that overlaps no
+  other range and whose ports can all be bound, and warns that the range moved. A range never spans two pools.
 - Ports held by something else, or reserved by the OS, are skipped at claim time.
 - Ranges of folders that no longer exist are dropped the next time a claim has to place a range.
 - Claims are serialised by a lock next to the registry, so concurrent `leeway` runs never get the same range.
@@ -175,7 +177,7 @@ folder still claims its own range, and an explicit `--default` or `--inherit` ke
 - `{{NAME}}` anywhere in the command becomes that port. A `{{NAME}}` that is not in the catalogue fails before anything is claimed or run.
 - `{{LEEWAY_ENV}}` becomes every catalogue port as JSON, `{"PORT_WEB":21000,"PORT_API":21001}`, so `LEEWAY_ENV` can't be a port name.
   It needs the command as several arguments, which leeway quotes; in a one-argument shell line it fails.
-- `env`, `list` and `kill` are leeway's own commands, and a flag before the command is leeway's: an unknown one fails with the usage. To
+- `env`, `list`, `kill` and `pools` are leeway's own commands, and a flag before the command is leeway's: an unknown one fails with the usage. To
   run a command with one of those names, or starting with `-`, put `--` first: `leeway -- kill ...`.
 - One argument is a shell line, run as-is: `leeway "vite build && vite preview"`. Several arguments are an argv: each is quoted for the
   shell when needed, so `leeway node -e "console.log(1)"` runs exactly that. On Windows a `.cmd` shim re-parses its arguments, so an
@@ -203,8 +205,8 @@ says so: restart anything still on the old ports. Use it as `eval "$(leeway env 
 
 ### `leeway list [--json]`
 
-Every registered range on the machine, from every repo, with the pid listening on each port, followed by orphans: listeners in the pool
-outside every range (for example a server left behind by a deleted worktree).
+Every registered range on the machine, from every repo, with the pid listening on each port, followed by orphans: listeners in the
+default pool outside every range (for example a server left behind by a deleted worktree).
 
 ```text
 /home/me/app  21000-21001
@@ -241,8 +243,34 @@ orphans (in the pool, outside every range)
 Kills every process tree listening in this folder's range, or with a port, in the range that contains it (any repo's). A listener started
 under `leeway` is killed with the nearest `leeway` run above it and that run's whole tree, so a watcher between them (`tsx watch`,
 `nodemon`) can't restart it; that takes down whatever else the run started too, like a `tsc --watch` beside the server under the same
-`concurrently`. A pool port outside every range is an orphan: `leeway kill <port>` kills just the listeners on that port, never their run.
-Ports outside every range and outside the pool are refused.
+`concurrently`. A default-pool port outside every range is an orphan: `leeway kill <port>` kills just the listeners on that port, never
+their run. Ports outside every range and outside the default pool are refused.
+
+### `leeway pools [set <start-end>... | reset]`
+
+The machine's pools, the blocks of ports every repo's ranges come from. For machines where 21000-29999 is a poor fit, for example when a
+firewall allows only certain ports or ports are forwarded into a container or VM. Pools apply to leeway 0.3 and later; older versions
+ignore them and keep claiming in 21000-29999.
+
+```sh
+$ leeway pools
+21000-29999 (the default pool)
+$ leeway pools set 3000-3999 21000-29999
+3000-3999
+21000-29999
+$ leeway pools reset
+21000-29999 (the default pool)
+```
+
+- `leeway pools` prints the pools in the order they were set, or the default pool when none are.
+- `leeway pools set` replaces the pools, in order of preference. Each pool is written `start-end`, like leeway prints ranges. Ports must be
+  integers 1-65535 and a start can't be above its end; no pools, or pools that overlap, are refused too, and nothing is written. Adjacent
+  pools are fine and stay separate.
+- `leeway pools reset` goes back to the default pool.
+- Neither moves any range. A range outside the new pools keeps holding its ports until its folder claims again, which moves it into a pool
+  with the usual warning.
+- The pools are stored as `pools` beside `folders` in `~/.leeway/ranges.json`. A hand edit leeway can't read makes claims and
+  `leeway pools` fail until you fix it, for example with `leeway pools set` or `leeway pools reset`.
 
 ## Agents
 
@@ -276,9 +304,9 @@ This is why `leeway env --export` prints nothing but plain `export NAME=port` li
   it still reads keys from stdin, but tools that open `/dev/tty` directly (some password prompts, full-screen TUIs) fail.
 - A port can be taken between the claim and your server binding it. `strictPort` and bind errors make that a loud failure, not a silent
   drift.
-- The pool is never compacted, so it can fragment. A full pool fails with a message; remove unused folders' ranges from
-  `~/.leeway/ranges.json`.
-- The pool is not configurable, and there is no `leeway init`: write `leeway.json` by hand.
+- Pools are never compacted, so they can fragment. When no pool has room, the claim fails with a message naming every pool; remove unused
+  folders' ranges from `~/.leeway/ranges.json`.
+- There is no `leeway init`: write `leeway.json` by hand.
 - `leeway list` and `leeway kill` scan listeners with `netstat` on Windows, `ss` on Linux and `lsof` on macOS. Without sudo on Linux and macOS they see
   only your own processes.
 - `leeway kill` recognises a `leeway` run by its command line (`.../leeway/dist/cli.mjs`, or a `bin/leeway` or `.bin/leeway` link to it). A listener whose `leeway` run is gone is
