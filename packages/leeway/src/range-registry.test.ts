@@ -343,7 +343,7 @@ describe("RangeRegistry.claim", () => {
         expect(fs.readFileSync(registryPath, "utf8")).toBe(contents);
     });
 
-    it("fails with a remove-unused-ranges message when no gap in the 21000-29999 pool fits", async () => {
+    it("fails with a leeway release message when no gap in the 21000-29999 pool fits", async () => {
         const hogPorts = Object.fromEntries(Array.from({ length: 8996 }, (_, index) => [`PORT_${index}`, 21000 + index]));
         const registryPath = createRegistryPath({
             version: 1,
@@ -351,7 +351,7 @@ describe("RangeRegistry.claim", () => {
         });
 
         await expect(claim(registryPath, "/too-big", ["PORT_A", "PORT_B", "PORT_C", "PORT_D", "PORT_E"])).rejects.toThrow(
-            /remove unused folders' ranges/,
+            /release unused folders' ranges with leeway release <folder>/,
         );
         expect(await claim(registryPath, "/fits", ["PORT_A", "PORT_B", "PORT_C", "PORT_D"])).toMatchObject({
             entry: { start: 29996, end: 29999 },
@@ -484,7 +484,7 @@ describe("RangeRegistry.claim from the machine's pools", () => {
         });
 
         await expect(claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C", "PORT_D"])).rejects.toThrow(
-            `leeway: no room for 4 ports in 3000-3001, 4000-4002; remove unused folders' ranges from ${registryPath} and try again`,
+            `leeway: no room for 4 ports in 3000-3001, 4000-4002; release unused folders' ranges with leeway release <folder> and try again`,
         );
     });
 
@@ -615,6 +615,102 @@ describe("RangeRegistry pools", () => {
             folders: { "/holder": { start: 21000 } },
             pools: [{ start: 3000, end: 3999 }],
         });
+    });
+});
+
+describe("RangeRegistry.release", () => {
+    it("removes the folder's entry, keeping every other entry and the keys it does not understand", async () => {
+        const other = { start: 21002, end: 21002, ports: { PORT_X: 21002 }, pool: "web" };
+        const unreadable = { ports: { PORT_A: 21008 } };
+        const registryPath = createRegistryPath({
+            version: 7,
+            profiles: { web: [30000, 30999] },
+            pools: [{ start: 21000, end: 21999, note: "mine" }],
+            folders: {
+                "/other": other,
+                "/repo": { start: 21000, end: 21001, ports: { PORT_A: 21000, PORT_B: 21001 }, pool: "web" },
+                "/no-range": unreadable,
+            },
+        });
+
+        const released = await RangeRegistry.release("/repo", "linux", registryPath);
+
+        expect(released).toEqual({ folder: "/repo", start: 21000, end: 21001, ports: { PORT_A: 21000, PORT_B: 21001 } });
+        expect(readRegistry(registryPath)).toEqual({
+            version: 7,
+            profiles: { web: [30000, 30999] },
+            pools: [{ start: 21000, end: 21999, note: "mine" }],
+            folders: { "/other": other, "/no-range": unreadable },
+        });
+    });
+
+    it("hands the released ports to the next claim", async () => {
+        const registryPath = createRegistryPath();
+        await claim(registryPath, "/old", ["PORT_A", "PORT_B"]);
+        await claim(registryPath, "/repo", ["PORT_A"]);
+
+        await RangeRegistry.release("/old", "linux", registryPath);
+        const { entry } = await claim(registryPath, "/new", ["PORT_A"]);
+
+        expect(entry).toEqual({ folder: "/new", start: 21000, end: 21000, ports: { PORT_A: 21000 } });
+    });
+
+    it.each([
+        ["no entry", { "/other": { start: 21000, end: 21000, ports: { PORT_X: 21000 } } }],
+        ["an entry without a readable range", { "/repo": { ports: { PORT_A: 21008 } } }],
+    ])("fails for a folder with %s and writes nothing", async (_, folders) => {
+        const registryPath = createRegistryPath({ version: 1, folders });
+        const before = fs.readFileSync(registryPath, "utf8");
+
+        await expect(RangeRegistry.release("/repo", "linux", registryPath)).rejects.toThrow("leeway: /repo has no range");
+        expect(fs.readFileSync(registryPath, "utf8")).toBe(before);
+    });
+
+    it("fails without creating a registry when there is none", async () => {
+        const registryPath = createRegistryPath();
+
+        await expect(RangeRegistry.release("/repo", "linux", registryPath)).rejects.toThrow("has no range");
+        expect(fs.existsSync(registryPath)).toBe(false);
+    });
+
+    it("matches a Windows folder by any spelling of its path", async () => {
+        const registryPath = createRegistryPath({
+            version: 1,
+            folders: { "c:\\worktrees\\repo": { start: 21000, end: 21000, ports: { PORT_A: 21000 } } },
+        });
+
+        const released = await RangeRegistry.release("C:/Worktrees/Repo/", "win32", registryPath);
+
+        expect(released.folder).toBe("c:\\worktrees\\repo");
+        expect(readRegistry(registryPath).folders).toEqual({});
+    });
+
+    it("keeps Linux folder paths that differ only in case apart", async () => {
+        const registryPath = createRegistryPath({
+            version: 1,
+            folders: { "/Repo": { start: 21000, end: 21000, ports: { PORT_A: 21000 } } },
+        });
+
+        await expect(RangeRegistry.release("/repo", "linux", registryPath)).rejects.toThrow("has no range");
+        expect(Object.keys(readRegistry(registryPath).folders)).toEqual(["/Repo"]);
+    });
+
+    it("waits for a claim holding the registry lock, and keeps the range that claim wrote", async () => {
+        const registryPath = createRegistryPath({
+            version: 1,
+            folders: { "/repo": { start: 21005, end: 21005, ports: { PORT_A: 21005 } } },
+        });
+        const holder = heldClaim(registryPath, "/holder");
+        await holder.locked;
+
+        const releasing = settledFlag(RangeRegistry.release("/repo", "linux", registryPath));
+        await pause(200);
+        const whileLocked = releasing.settled();
+        holder.finish();
+        await releasing.claimed;
+
+        expect(whileLocked).toBe(false);
+        expect(readRegistry(registryPath).folders).toEqual({ "/holder": { start: 21000, end: 21000, ports: { PORT_A: 21000 } } });
     });
 });
 

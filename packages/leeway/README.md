@@ -75,7 +75,8 @@ repo on the machine:
   running servers). Otherwise it takes the first gap, pools in the order they were set and each pool from low to high, that overlaps no
   other range and whose ports can all be bound, and warns that the range moved. A range never spans two pools.
 - Ports held by something else, or reserved by the OS, are skipped at claim time.
-- Ranges of folders that no longer exist are dropped the next time a claim has to place a range.
+- Ranges of folders that no longer exist are dropped the next time a claim has to place a range; `leeway release` releases the range of
+  a folder that still exists.
 - Claims are serialised by a lock next to the registry, so concurrent `leeway` runs never get the same range.
 - Repos on different leeway versions share the registry: from 0.3 on, no version refuses it, a claim keeps data it doesn't understand,
   and every readable range holds its ports.
@@ -177,7 +178,7 @@ folder still claims its own range, and an explicit `--default` or `--inherit` ke
 - `{{NAME}}` anywhere in the command becomes that port. A `{{NAME}}` that is not in the catalogue fails before anything is claimed or run.
 - `{{LEEWAY_ENV}}` becomes every catalogue port as JSON, `{"PORT_WEB":21000,"PORT_API":21001}`, so `LEEWAY_ENV` can't be a port name.
   It needs the command as several arguments, which leeway quotes; in a one-argument shell line it fails.
-- `env`, `list`, `kill` and `pools` are leeway's own commands, and a flag before the command is leeway's: an unknown one fails with the usage. To
+- `env`, `list`, `kill`, `release` and `pools` are leeway's own commands, and a flag before the command is leeway's: an unknown one fails with the usage. To
   run a command with one of those names, or starting with `-`, put `--` first: `leeway -- kill ...`.
 - One argument is a shell line, run as-is: `leeway "vite build && vite preview"`. Several arguments are an argv: each is quoted for the
   shell when needed, so `leeway node -e "console.log(1)"` runs exactly that. On Windows a `.cmd` shim re-parses its arguments, so an
@@ -246,6 +247,21 @@ under `leeway` is killed with the nearest `leeway` run above it and that run's w
 `concurrently`. A port in a pool outside every range is an orphan: `leeway kill <port>` kills just the listeners on that port, never
 their run. Ports outside every range and every pool are refused.
 
+### `leeway release [<folder>]`
+
+Drops this folder's range from the registry, or with a path, that folder's (with or without a `leeway.json`, existing or not), so its
+ports go back to the pools; the folder's next claim places a new range. It takes the claim lock and keeps everything else in the
+registry.
+
+```sh
+$ leeway release ~/old-clone
+leeway: released 21000-21001 for /home/me/old-clone
+  pid 4120  21000  still listening, now an orphan; stop it with leeway kill 21000
+```
+
+It never kills anything: what still listens in the released range, inside a pool, is listed as an orphan. A folder without a range fails, and nothing is
+written.
+
 ### `leeway pools [set <start-end>... | reset]`
 
 The machine's pools, the blocks of ports every repo's ranges come from. For machines where 21000-29999 is a poor fit, for example when a
@@ -304,8 +320,8 @@ This is why `leeway env --export` prints nothing but plain `export NAME=port` li
   it still reads keys from stdin, but tools that open `/dev/tty` directly (some password prompts, full-screen TUIs) fail.
 - A port can be taken between the claim and your server binding it. `strictPort` and bind errors make that a loud failure, not a silent
   drift.
-- Pools are never compacted, so they can fragment. When no pool has room, the claim fails with a message naming every pool; remove unused
-  folders' ranges from `~/.leeway/ranges.json`.
+- Pools are never compacted, so they can fragment. When no pool has room, the claim fails with a message naming every pool; release unused
+  folders' ranges with `leeway release <folder>`.
 - There is no `leeway init`: write `leeway.json` by hand.
 - `leeway list` and `leeway kill` scan listeners with `netstat` on Windows, `ss` on Linux and `lsof` on macOS. Without sudo on Linux and macOS they see
   only your own processes.

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import path from "node:path";
 import { ConfigFile, type FoundConfig } from "./config-file.ts";
 import { devPorts } from "./dev-ports.ts";
 import { ExecCommand, type ExecMode, type ExecRequest } from "./exec-command.ts";
@@ -18,11 +19,12 @@ const USAGE = [
     "       leeway env --export                             claim this folder's range and print it as export lines",
     "       leeway list [--json]                            show every range, the pids listening in it, and orphan listeners in the pools",
     "       leeway kill [<port>]                            kill what listens in this folder's range, or in the range holding <port>, or on an orphan <port>",
+    "       leeway release [<folder>]                       release this folder's range, or <folder>'s, so its ports go back to the pools",
     "       leeway pools [set <start-end>... | reset]       show the machine's pools, set them in order of preference, or go back to the default pool",
     "       leeway --help | -h | --version",
 ].join("\n");
 
-const SUBCOMMANDS = new Set(["env", "list", "kill", "pools"]);
+const SUBCOMMANDS = new Set(["env", "list", "kill", "release", "pools"]);
 
 async function runLeeway(): Promise<void> {
     const args = process.argv.slice(2);
@@ -46,6 +48,8 @@ async function runLeeway(): Promise<void> {
         process.stdout.write(rest.length === 0 ? RangeListing.render(listing, pools) : `${JSON.stringify(listing, undefined, 4)}\n`);
     } else if (subcommand === "kill" && rest.length <= 1 && rest.every(arg => /^\d+$/.test(arg))) {
         killRange(rest[0]);
+    } else if (subcommand === "release" && rest.length <= 1 && rest.every(arg => !arg.startsWith("-"))) {
+        await releaseRange(rest[0]);
     } else if (subcommand === "pools" && rest[0] === "set") {
         await RangeRegistry.setPools(rest.slice(1));
         printPools();
@@ -125,6 +129,22 @@ function killRange(port: string | undefined): void {
     if (failures.size > 0) {
         process.exit(1);
     }
+}
+
+async function releaseRange(folder: string | undefined): Promise<void> {
+    const pools = RangeRegistry.pools();
+    const released = await RangeRegistry.release(folder === undefined ? ConfigFile.find(process.cwd()).folder : path.resolve(folder));
+    const { start, end } = released;
+    const orphans = ListenerScan.listeners().filter(
+        listener => listener.port >= start && listener.port <= end && Pools.holds(pools, listener.port),
+    );
+
+    process.stdout.write(
+        `leeway: released ${start}-${end} for ${released.folder}\n` +
+            orphans
+                .map(({ pid, port }) => `  pid ${pid}  ${port}  still listening, now an orphan; stop it with leeway kill ${port}\n`)
+                .join(""),
+    );
 }
 
 function printPools(): void {
