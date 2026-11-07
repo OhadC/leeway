@@ -114,6 +114,22 @@ describe("RangeKill.render", () => {
         );
     });
 
+    it("reports listeners whose pid is hidden as failed, with a hint to run with sudo", () => {
+        const listeners = [...LISTENERS, { port: 21000, pid: null }, { port: 21001, pid: null }];
+        const plan = RangeKill.planOfPort([APP], listeners, 21000, defaultPools);
+
+        expect(RangeKill.render(plan, new Map())).toBe(
+            [
+                "leeway: c:\\dev\\app  21000-21002",
+                "  pid 70  web 21000, docs 21002  killed",
+                "  pid 60  api 21001  killed",
+                "  pid ?  web 21000  failed: pid hidden, run with sudo to kill it",
+                "  pid ?  api 21001  failed: pid hidden, run with sudo to kill it",
+                "",
+            ].join("\n"),
+        );
+    });
+
     it("reports an orphan port's pids without names", () => {
         expect(RangeKill.render(RangeKill.planOfPort([], [{ port: 25000, pid: 90 }], 25000, defaultPools), new Map())).toBe(
             ["leeway: orphan port 25000", "  pid 90  25000  killed", ""].join("\n"),

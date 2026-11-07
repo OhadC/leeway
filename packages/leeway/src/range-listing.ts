@@ -14,7 +14,7 @@ export type Listing = {
 type ListedPort = {
     name: string;
     port: number;
-    pids: number[];
+    pids: (number | null)[];
 };
 
 export class RangeListing {
@@ -67,6 +67,6 @@ export class RangeListing {
     }
 }
 
-function pidCell(pids: number[]): string {
-    return pids.length === 0 ? "-" : `pid ${pids.join(", ")}`;
+function pidCell(pids: (number | null)[]): string {
+    return pids.length === 0 ? "-" : `pid ${pids.map(pid => pid ?? "?").join(", ")}`;
 }

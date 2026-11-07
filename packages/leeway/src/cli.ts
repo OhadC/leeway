@@ -119,14 +119,12 @@ function killRange(port: string | undefined): void {
         port === undefined
             ? RangeKill.planOfFolder(entries, listeners, ConfigFile.find(process.cwd()).folder, process.platform)
             : RangeKill.planOfPort(entries, listeners, Number(port), () => RangeRegistry.pools());
-    const failures = ProcessTree.killTrees(
-        plan.targets.map(target => target.pid),
-        plan.withRuns,
-    );
+    const visiblePids = plan.targets.flatMap(target => (target.pid === null ? [] : [target.pid]));
+    const failures = ProcessTree.killTrees(visiblePids, plan.withRuns);
 
     process.stdout.write(RangeKill.render(plan, failures));
 
-    if (failures.size > 0) {
+    if (failures.size > 0 || plan.targets.some(target => target.pid === null)) {
         process.exit(1);
     }
 }
@@ -142,7 +140,7 @@ async function releaseRange(folder: string | undefined): Promise<void> {
     process.stdout.write(
         `leeway: released ${start}-${end} for ${released.folder}\n` +
             orphans
-                .map(({ pid, port }) => `  pid ${pid}  ${port}  still listening, now an orphan; stop it with leeway kill ${port}\n`)
+                .map(({ pid, port }) => `  pid ${pid ?? "?"}  ${port}  still listening, now an orphan; stop it with leeway kill ${port}\n`)
                 .join(""),
     );
 }

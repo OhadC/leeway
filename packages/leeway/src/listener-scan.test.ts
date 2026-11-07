@@ -67,11 +67,12 @@ describe("ListenerScan.listeners", () => {
         ]);
     });
 
-    it("reads linux listeners from ss, for every user of a socket and every address form", () => {
+    it("reads linux listeners from ss, for every user of a socket and every address form, with a null pid where ss hides it", () => {
         expect(ListenerScan.listeners("linux", printed(LINUX_SS))).toEqual([
             { port: 22, pid: 900 },
             { port: 22, pid: 901 },
             { port: 53, pid: 600 },
+            { port: 631, pid: null },
             { port: 8080, pid: 1234 },
             { port: 21001, pid: 4321 },
         ]);

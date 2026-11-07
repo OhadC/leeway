@@ -39,6 +39,30 @@ describe("RangeListing.collect", () => {
         expect(RangeListing.render(listing, Pools.DEFAULT)).toContain("  docs  21002  pid 60, 61\n");
     });
 
+    it("lists a listener whose pid is hidden as a null pid, printed pid ?, in a range and as an orphan", () => {
+        const listing = RangeListing.collect(
+            [TOOL],
+            [
+                { port: 21002, pid: null },
+                { port: 25000, pid: null },
+            ],
+            Pools.DEFAULT,
+        );
+
+        expect(listing.ranges[0]?.ports).toEqual([{ name: "docs", port: 21002, pids: [null] }]);
+        expect(listing.orphans).toEqual([{ port: 25000, pid: null }]);
+        expect(RangeListing.render(listing, Pools.DEFAULT)).toBe(
+            [
+                "C:\\dev\\tool  21002-21002",
+                "  docs  21002  pid ?",
+                "",
+                "orphans (in a pool, outside every range)",
+                "  25000  pid ?",
+                "",
+            ].join("\n"),
+        );
+    });
+
     it("reports listeners in every pool outside every range as orphans and ignores listeners outside every pool", () => {
         const listing = RangeListing.collect(
             [APP],

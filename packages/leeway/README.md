@@ -323,8 +323,9 @@ This is why `leeway env --export` prints nothing but plain `export NAME=port` li
 - Pools are never compacted, so they can fragment. When no pool has room, the claim fails with a message naming every pool; release unused
   folders' ranges with `leeway release <folder>`.
 - There is no `leeway init`: write `leeway.json` by hand.
-- `leeway list` and `leeway kill` scan listeners with `netstat` on Windows, `ss` on Linux and `lsof` on macOS. Without sudo on Linux and macOS they see
-  only your own processes.
+- `leeway list` and `leeway kill` scan listeners with `netstat` on Windows, `ss` on Linux and `lsof` on macOS. Without sudo on macOS they see
+  only your own processes. Without sudo on Linux they see other users' listeners without a pid: `leeway list` shows `pid ?` (`null` in
+  `--json`), and `leeway kill` reports them as failed and exits 1.
 - `leeway kill` recognises a `leeway` run by its command line (`.../leeway/dist/cli.mjs`, or a `bin/leeway` or `.bin/leeway` link to it). A listener whose `leeway` run is gone is
   killed alone, so a watcher above it can still restart it.
 
