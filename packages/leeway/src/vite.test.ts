@@ -3,9 +3,10 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
-import { build, createServer, type InlineConfig, preview, type Rolldown, type ViteDevServer } from "vite";
+import { build, createServer, type InlineConfig, preview, type PreviewServer, type Rolldown, type ViteDevServer } from "vite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LeewayConfig } from "./dev-ports.ts";
+import { Pools } from "./pools.ts";
 import { leeway } from "./vite.ts";
 
 const DEV_PORTS_PATH = path.join(import.meta.dirname, "dev-ports.ts");
@@ -24,7 +25,7 @@ describe("leeway vite plugin in a dev server", () => {
     it("listens on the catalogue's port for the chosen port name", async () => {
         const port = await freePoolPort();
 
-        const server = await listening({ plugins: [leeway({ config: catalogue({ PORT_WEB: port }), port: "PORT_WEB" })] });
+        const server = await startDevServer({ plugins: [leeway({ config: catalogue({ PORT_WEB: port }), port: "PORT_WEB" })] });
 
         expect(listeningPortOf(server)).toBe(port);
     });
@@ -33,14 +34,14 @@ describe("leeway vite plugin in a dev server", () => {
         const port = await freePoolPort();
         vi.stubEnv("PORT_WEB", String(port));
 
-        const server = await listening({ plugins: [leeway({ config: catalogue({ PORT_WEB: 5173 }), port: "PORT_WEB" })] });
+        const server = await startDevServer({ plugins: [leeway({ config: catalogue({ PORT_WEB: 5173 }), port: "PORT_WEB" })] });
 
         expect(listeningPortOf(server)).toBe(port);
     });
 
     it("fails instead of moving to another port when the port is taken", async () => {
         const port = await freePoolPort();
-        await occupied(port);
+        await occupy(port);
 
         const server = await createServer(
             inlineConfig({ server: { host: "127.0.0.1" }, plugins: [leeway({ config: catalogue({ PORT_WEB: port }), port: "PORT_WEB" })] }),
@@ -52,13 +53,13 @@ describe("leeway vite plugin in a dev server", () => {
 
     it("hands every resolved port to devPorts in the served code", async () => {
         const web = await freePoolPort();
-        const api = 24556;
-        vi.stubEnv("PORT_API", String(api));
+        const apiFromEnv = 24556;
+        vi.stubEnv("PORT_API", String(apiFromEnv));
         const config = catalogue({ PORT_WEB: web, PORT_API: 3001 });
 
-        const server = await listening({ plugins: [leeway({ config, port: "PORT_WEB" })] });
+        const server = await startDevServer({ plugins: [leeway({ config, port: "PORT_WEB" })] });
 
-        expect(await servedPorts(server, config)).toEqual({ PORT_WEB: web, PORT_API: api });
+        expect(await servedPorts(server, config)).toEqual({ PORT_WEB: web, PORT_API: apiFromEnv });
     });
 
     it("finds the config above vite's root when none is given", async () => {
@@ -68,7 +69,7 @@ describe("leeway vite plugin in a dev server", () => {
         fs.mkdirSync(appRoot, { recursive: true });
         fs.writeFileSync(path.join(folder, "leeway.json"), JSON.stringify(catalogue({ PORT_DOCS: port })));
 
-        const server = await listening({ root: appRoot, plugins: [leeway({ port: "PORT_DOCS" })] });
+        const server = await startDevServer({ root: appRoot, plugins: [leeway({ port: "PORT_DOCS" })] });
 
         expect(listeningPortOf(server)).toBe(port);
     });
@@ -90,7 +91,7 @@ describe("leeway vite plugin in a preview server", () => {
     it("previews on its own port when asked", async () => {
         const [web, api] = [await freePoolPort(), await freePoolPort()];
 
-        const server = await previewing({
+        const server = await startPreviewServer({
             plugins: [leeway({ config: catalogue({ PORT_WEB: web, PORT_API: api }), port: "PORT_WEB", preview: "PORT_API" })],
         });
 
@@ -101,17 +102,20 @@ describe("leeway vite plugin in a preview server", () => {
         const port = await freePoolPort();
         vi.stubEnv("PORT_WEB", String(port));
 
-        const server = await previewing({ plugins: [leeway({ config: catalogue({ PORT_WEB: 5173 }), port: "PORT_WEB" })] });
+        const server = await startPreviewServer({ plugins: [leeway({ config: catalogue({ PORT_WEB: 5173 }), port: "PORT_WEB" })] });
 
         expect(listeningPortOf(server)).toBe(port);
     });
 
     it("fails instead of moving to another port when the preview port is taken", async () => {
         const port = await freePoolPort();
-        await occupied(port);
+        await occupy(port);
 
         await expect(
-            previewing({ preview: { host: "127.0.0.1" }, plugins: [leeway({ config: catalogue({ PORT_WEB: port }), port: "PORT_WEB" })] }),
+            startPreviewServer({
+                preview: { host: "127.0.0.1" },
+                plugins: [leeway({ config: catalogue({ PORT_WEB: port }), port: "PORT_WEB" })],
+            }),
         ).rejects.toThrowError(String(port));
     });
 });
@@ -151,7 +155,7 @@ function inlineConfig(config: InlineConfig): InlineConfig {
     return { configFile: false, logLevel: "silent", ...config, root: config.root ?? tempFolder() };
 }
 
-async function listening(config: InlineConfig): Promise<ViteDevServer> {
+async function startDevServer(config: InlineConfig): Promise<ViteDevServer> {
     const server = await createServer(inlineConfig(config));
 
     closers.push(() => server.close());
@@ -159,7 +163,7 @@ async function listening(config: InlineConfig): Promise<ViteDevServer> {
     return server.listen();
 }
 
-async function previewing(config: InlineConfig) {
+async function startPreviewServer(config: InlineConfig) {
     const resolved = inlineConfig(config);
     fs.mkdirSync(path.join(resolved.root!, "dist"));
     const server = await preview(resolved);
@@ -169,8 +173,8 @@ async function previewing(config: InlineConfig) {
     return server;
 }
 
-function listeningPortOf(server: { httpServer: unknown }): number | undefined {
-    return ((server.httpServer as net.Server).address() as net.AddressInfo | null)?.port;
+function listeningPortOf(server: ViteDevServer | PreviewServer): number | undefined {
+    return (server.httpServer?.address() as net.AddressInfo | null)?.port;
 }
 
 async function servedPorts(server: ViteDevServer, config: LeewayConfig): Promise<unknown> {
@@ -216,7 +220,8 @@ function inBrowser(scripts: string[]): unknown {
 
 async function freePoolPort(): Promise<number> {
     for (;;) {
-        const port = 21000 + Math.floor(Math.random() * 9000);
+        const { start, end } = Pools.DEFAULT[0]!;
+        const port = start + Math.floor(Math.random() * (end - start + 1));
 
         if (await isFree(port)) {
             return port;
@@ -233,7 +238,7 @@ function isFree(port: number): Promise<boolean> {
     });
 }
 
-function occupied(port: number): Promise<void> {
+function occupy(port: number): Promise<void> {
     const server = net.createServer();
 
     closers.push(() => new Promise(resolve => server.close(() => resolve())));

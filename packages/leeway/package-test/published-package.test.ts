@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { Pools } from "../src/pools.ts";
+import { LeewayCli } from "../test/leeway-cli.ts";
 
 const packageDir = path.resolve(import.meta.dirname, "..");
 const packageJson = readJson(path.join(packageDir, "package.json"));
@@ -74,7 +76,7 @@ export { catalogue, docs, env, web };
 };
 
 beforeAll(() => {
-    succeeded("npm", ["pack", "--pack-destination", scratchDir], packageDir);
+    stdoutOf("npm", ["pack", "--pack-destination", scratchDir], packageDir);
     const tarball = fs.readdirSync(scratchDir).find(file => file.endsWith(".tgz"));
 
     fs.mkdirSync(consumerDir);
@@ -94,7 +96,7 @@ beforeAll(() => {
         }),
     );
     Object.entries(CONSUMER_FILES).forEach(([name, source]) => fs.writeFileSync(path.join(consumerDir, name), source));
-    succeeded("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error"], consumerDir);
+    stdoutOf("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error"], consumerDir);
 }, 300_000);
 
 afterAll(() => {
@@ -111,25 +113,22 @@ describe("the installed leeway bin", () => {
     });
 
     it("prints an export line in the pool for each port name for env --export", () => {
-        const lines = leewayIn(["env", "--export"]).trim().split(/\r?\n/);
+        const ports = LeewayCli.exportedPorts(leewayIn(["env", "--export"]));
 
-        expect(lines.map(line => /^export (\w+)=/.exec(line)?.[1])).toEqual(Object.keys(catalogue.ports));
-        lines.forEach(line => {
-            expect(Number(line.split("=")[1])).toBeGreaterThanOrEqual(21000);
-            expect(Number(line.split("=")[1])).toBeLessThanOrEqual(29999);
-        });
+        expect(Object.keys(ports)).toEqual(Object.keys(catalogue.ports));
+        expect(Object.values(ports).filter(port => !Pools.holds(Pools.DEFAULT, port))).toEqual([]);
     });
 
     it("hands the claimed ports to <command>", () => {
-        const claimed = /PORT_WEB=(\d+)/.exec(leewayIn(["env", "--export"]))?.[1];
+        const claimed = LeewayCli.exportedPorts(leewayIn(["env", "--export"])).PORT_WEB;
 
-        expect(leewayIn(["node", "print-port.mjs"]).trim()).toBe(claimed);
+        expect(leewayIn(["node", "print-port.mjs"]).trim()).toBe(String(claimed));
     });
 });
 
 describe("the installed leeway entries", () => {
     it("import leeway, leeway/vite and leeway/schema.json", () => {
-        expect(JSON.parse(stdoutIn("node", ["imports.mjs"]))).toEqual({
+        expect(JSON.parse(consumerStdout("node", ["imports.mjs"]))).toEqual({
             ports: { PORT_WEB: 5173, PORT_API: 3001 },
             plugin: "leeway",
             schema: "object",
@@ -137,27 +136,23 @@ describe("the installed leeway entries", () => {
     });
 
     it("bundle leeway for the browser without a vite warning", () => {
-        expect(stdoutIn("node", ["browser-build.mjs"])).toBe("");
+        expect(consumerStdout("node", ["browser-build.mjs"])).toBe("");
     });
 
     it("typecheck a consumer against the published declarations", () => {
-        expect(stdoutIn("npx", ["tsc", "-p", "tsconfig.json"])).toBe("");
+        expect(consumerStdout("npx", ["tsc", "-p", "tsconfig.json"])).toBe("");
     });
 });
 
 function leewayIn(args: string[]): string {
-    return stdoutIn("npx", ["leeway", ...args]);
+    return consumerStdout("npx", ["leeway", ...args]);
 }
 
-function stdoutIn(command: string, args: string[]): string {
-    return succeeded(command, args, consumerDir, { ...userEnv(), HOME: homeDir, USERPROFILE: homeDir });
+function consumerStdout(command: string, args: string[]): string {
+    return stdoutOf(command, args, consumerDir, LeewayCli.env(homeDir, {}));
 }
 
-function userEnv(): NodeJS.ProcessEnv {
-    return Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== "NODE_ENV" && !name.startsWith("VITEST")));
-}
-
-function succeeded(command: string, args: string[], cwd: string, env = process.env): string {
+function stdoutOf(command: string, args: string[], cwd: string, env = process.env): string {
     const commandLine = [command, ...args].map(arg => (arg.includes(" ") ? `"${arg}"` : arg)).join(" ");
     const result = spawnSync(commandLine, { cwd, env, encoding: "utf8", shell: true });
 

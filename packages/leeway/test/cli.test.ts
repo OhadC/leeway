@@ -3,6 +3,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { Pools } from "../src/pools.ts";
 import { LeewayCli } from "./leeway-cli.ts";
 
 const SERVER =
@@ -195,10 +196,7 @@ describe("leeway env --export from separate processes at once", () => {
         const registry = JSON.parse(fs.readFileSync(path.join(home, ".leeway", "ranges.json"), "utf8"));
 
         expect(results.map(({ code }) => code)).toEqual(dirs.map(() => 0));
-        ranges.flat().forEach(port => {
-            expect(port).toBeGreaterThanOrEqual(21000);
-            expect(port).toBeLessThanOrEqual(29999);
-        });
+        expect(ranges.flat().filter(port => !Pools.holds(Pools.DEFAULT, port))).toEqual([]);
         expect(new Set(ranges.flat()).size).toBe(ranges.flat().length);
         expect(Object.keys(registry.folders)).toHaveLength(dirs.length);
         dirs.forEach((dir, index) => expect(LeewayCli.run(["env", "--export"], dir, home).stdout).toBe(results[index]!.stdout));
