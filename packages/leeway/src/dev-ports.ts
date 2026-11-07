@@ -1,18 +1,27 @@
+/** Every port the dev setup uses, keyed by port name. Each port name is also the environment variable its port travels in; `port` is the default port. */
 export type LeewayCatalogue = Record<string, { port: number }>;
 
 export type LeewayConfig = {
     ports: LeewayCatalogue;
+    /** Makes `devPorts` throw in an agent shell (`CLAUDECODE`, `GEMINI_CLI`, `CURSOR_AGENT` or `AI_AGENT` set) when none of the catalogue's port names is set in the environment. Skipped under `VITEST`. */
     agentGuard?: boolean;
 };
 
 export type LeewayEnv = Record<string, string | number | undefined>;
 
+/** One port per port name of `T`'s catalogue. */
 export type PortsOf<T extends LeewayConfig> = Record<keyof T["ports"] & string, number>;
 
 declare const LEEWAY_ENV: Record<string, number> | undefined;
 
 const AGENT_MARKERS = ["CLAUDECODE", "GEMINI_CLI", "CURSOR_AGENT", "AI_AGENT"];
 
+/**
+ * Returns one port per catalogue entry: the environment variable named after its port name when set, else its default port.
+ * Browser-safe: in the browser it reads the ports injected as `LEEWAY_ENV` by `leeway/vite` or the `{{LEEWAY_ENV}}` placeholder.
+ * @param env Defaults to `LEEWAY_ENV` merged with `process.env`.
+ * @throws When a set value isn't an integer 1-65535, or when `agentGuard` refuses.
+ */
 export function devPorts<T extends LeewayConfig>(config: T, env: LeewayEnv = currentEnv()): PortsOf<T> {
     const catalogue = config.ports;
 

@@ -3,12 +3,22 @@ import { ConfigFile } from "./config-file.ts";
 import { devPorts, type LeewayConfig } from "./dev-ports.ts";
 
 export type LeewayViteOptions<T extends LeewayConfig> = {
+    /** The leeway config; passing it types `port` and `preview` against its port names. Defaults to the nearest `leeway.json` from vite's `root`. */
     config?: T;
+    /** The port name `vite serve` listens on. */
     port: NoInfer<keyof T["ports"] & string>;
+    /** The port name `vite preview` listens on. Defaults to `port`. */
     preview?: NoInfer<keyof T["ports"] & string>;
+    /** Apply the ports and `LEEWAY_ENV` on `vite build` too. */
     alwaysInject?: boolean;
 };
 
+/**
+ * Sets `server.port` and `preview.port` from `devPorts`, with `strictPort: true` so a taken port fails instead of drifting.
+ * Defines `LEEWAY_ENV` with every catalogue port, so `devPorts` in browser code sees the server's ports.
+ * Leaves `vite build` untouched unless `alwaysInject` is set.
+ * @throws When `port` or `preview` isn't a port name in the catalogue.
+ */
 export function leeway<T extends LeewayConfig = LeewayConfig>(options: LeewayViteOptions<T>): Plugin {
     return {
         name: "leeway",
