@@ -3,7 +3,7 @@
     "scripts": [
         {
             "name": "Setup Worktree",
-            "command": "pnpm i && pnpm build",
+            "command": "pnpm i",
             "icon": "configure",
             "runOnWorktreeCreate": true,
             "async": false
