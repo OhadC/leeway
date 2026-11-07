@@ -21,7 +21,6 @@ const LOOKALIKES = new Set(["windows"]);
 const ALLOWED: Record<string, string[]> = {
     "GLOSSARY.md": ["*"],
     "scripts/check-terms.ts": ["*"],
-    "packages/leeway/README.md": ["service"],
     "packages/leeway/src/vite.ts": ["root"],
     "packages/leeway/src/vite.test.ts": ["root"],
     "packages/leeway/test/leeway-cli.ts": ["window"],
@@ -48,9 +47,16 @@ for (const file of files) {
     if (allowed.includes("*")) {
         continue;
     }
+    let inCodeBlock = false;
     fs.readFileSync(path.join(repoDir, file), "utf8")
         .split("\n")
         .forEach((line, index) => {
+            if (file.endsWith(".md") && line.trimStart().startsWith("```")) {
+                inCodeBlock = !inCodeBlock;
+            }
+            if (inCodeBlock) {
+                return;
+            }
             const prose = file.endsWith(".md") ? line.replace(/`[^`]*`/g, " ") : line;
             for (const [word, term] of wordsOf(prose).matchAll(pattern)) {
                 if (!allowed.includes(term!) && !LOOKALIKES.has(word)) {

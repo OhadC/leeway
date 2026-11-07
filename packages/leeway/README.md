@@ -348,7 +348,7 @@ This is why `leeway env --export` prints nothing but plain `export NAME=port` li
 
 Turbo 2 runs tasks in strict env mode by default: a task sees only the environment variables `turbo.json` lists. Under
 `leeway turbo dev`, turbo gets the ports but its tasks don't, so their servers start on default ports and collide. List the port names,
-here with a wildcard, and `LEEWAY_FOLDER`, so a `leeway` call inside a task runs on the same ports as a nested call:
+here with a wildcard, and `LEEWAY_FOLDER`, so a `leeway` call inside a task is a nested call and runs on turbo's ports:
 
 ```json
 {
@@ -370,11 +370,12 @@ Pass the port with a placeholder:
 }
 ```
 
-Servers that read `PORT` by convention, like Next.js and Nuxt, need no flag when the catalogue has a port named `PORT`: `leeway next dev`.
+Servers that read `PORT` by convention, like Next.js and Nuxt, need no flag when the catalogue has a port named `PORT`: `leeway next dev`. Nuxt prefers
+`NUXT_PORT` and `NITRO_PORT` when set.
 
 ### Playwright
 
-Run the tests as `leeway playwright test`. The config reads the ports with `devPorts`, and the `webServer` command `leeway vite` is a
+Run the tests as `leeway playwright test`. `playwright.config.ts` reads the ports with `devPorts`, and the `webServer` command `leeway vite` is a
 nested call, so it serves on the ports the tests use:
 
 ```ts

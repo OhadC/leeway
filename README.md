@@ -77,7 +77,7 @@ export default defineConfig({ plugins: [leeway({ config, port: "PORT_WEB" })] })
   them too.
 - **Placeholders**: `leeway curl http://localhost:{{PORT_API}}` puts the port in the command.
 - **Cleanup**: `leeway list` shows every range on the machine with what is listening, plus orphans left by deleted worktrees.
-  `leeway kill` stops a folder's servers, including the watcher that would restart them, and `leeway kill --orphans` every orphan.
+  `leeway kill` stops a folder's servers, including the watcher that would restart them, and `leeway kill --orphans` kills every orphan.
   `leeway release` gives a folder's range back to the pools.
 - **Agents**: `leeway env --export` in a Claude Code SessionStart hook gives every agent session its range up front. The opt-in agent
   guard makes `devPorts` refuse default ports in an agent shell that has none.
