@@ -5,20 +5,21 @@ import { ConfigFile, type FoundConfig } from "./config-file.ts";
 import { devPorts } from "./dev-ports.ts";
 import { ExecCommand, type ExecMode, type ExecRequest } from "./exec-command.ts";
 import { FolderRange } from "./folder-range.ts";
-import { ListenerScan } from "./listener-scan.ts";
+import { ListenerScan, type PortListener } from "./listener-scan.ts";
 import { Pools } from "./pools.ts";
 import { ProcessTree } from "./process-tree.ts";
-import { RangeKill } from "./range-kill.ts";
+import { type KillPlan, RangeKill } from "./range-kill.ts";
 import { RangeListing } from "./range-listing.ts";
-import { RangeRegistry } from "./range-registry.ts";
+import { type RangeEntry, RangeRegistry } from "./range-registry.ts";
 import { RunWithPorts } from "./run-with-ports.ts";
 
 const USAGE = [
     "usage: leeway [--default | --inherit] [--] <command>   run <command> with this folder's range as env vars; {{NAME}} in <command> becomes its port, {{LEEWAY_ENV}} every port as JSON",
     "                                                       --default: the default ports; --inherit: the ports in the environment, else the default ports",
-    "       leeway env --export                             claim this folder's range and print it as export lines",
+    "       leeway env [--export]                           claim this folder's range and print it as dotenv lines, or export lines",
     "       leeway list [--json]                            show every range, the pids listening in it, and orphan listeners in the pools",
-    "       leeway kill [<port>]                            kill what listens in this folder's range, or in the range holding <port>, or on an orphan <port>",
+    "       leeway kill [<port> | --orphans]                kill what listens in this folder's range, or in the range holding <port>, or on an orphan <port>",
+    "                                                       --orphans: every orphan in the pools",
     "       leeway release [<folder>]                       release this folder's range, or <folder>'s, so its ports go back to the pools",
     "       leeway pools [set <start-end>... | reset]       show the machine's pools, set them in order of preference, or go back to the default pool",
     "       leeway --help | -h | --version",
@@ -39,14 +40,14 @@ async function runLeeway(): Promise<void> {
         process.stdout.write(`${version}\n`);
     } else if (request) {
         await execWithPorts(ConfigFile.find(process.cwd()), request);
-    } else if (subcommand === "env" && rest.length === 1 && rest[0] === "--export") {
-        await printExportLines(ConfigFile.find(process.cwd()));
+    } else if (subcommand === "env" && (rest.length === 0 || (rest.length === 1 && rest[0] === "--export"))) {
+        await printEnvLines(ConfigFile.find(process.cwd()), rest[0] === "--export");
     } else if (subcommand === "list" && (rest.length === 0 || (rest.length === 1 && rest[0] === "--json"))) {
         const pools = RangeRegistry.pools();
         const listing = RangeListing.collect(RangeRegistry.livingEntries(), ListenerScan.listeners(), pools);
 
         process.stdout.write(rest.length === 0 ? RangeListing.render(listing, pools) : `${JSON.stringify(listing, undefined, 4)}\n`);
-    } else if (subcommand === "kill" && rest.length <= 1 && rest.every(arg => /^\d+$/.test(arg))) {
+    } else if (subcommand === "kill" && rest.length <= 1 && rest.every(arg => /^\d+$/.test(arg) || arg === "--orphans")) {
         killRange(rest[0]);
     } else if (subcommand === "release" && rest.length <= 1 && rest.every(arg => !arg.startsWith("-"))) {
         await releaseRange(rest[0]);
@@ -102,23 +103,21 @@ async function portsOfMode(found: FoundConfig, mode: ExecMode): Promise<Record<s
     return claim.entry.ports;
 }
 
-async function printExportLines(found: FoundConfig): Promise<void> {
+async function printEnvLines(found: FoundConfig, asExports: boolean): Promise<void> {
     const ports = await portsOfMode(found, "claim");
+    const linePrefix = asExports ? "export " : "";
 
     process.stdout.write(
         Object.entries(ports)
-            .map(([name, port]) => `export ${name}=${port}\n`)
+            .map(([name, port]) => `${linePrefix}${name}=${port}\n`)
             .join(""),
     );
 }
 
-function killRange(port: string | undefined): void {
+function killRange(arg: string | undefined): void {
     const entries = RangeRegistry.livingEntries();
     const listeners = ListenerScan.listeners().filter(listener => listener.pid !== process.pid);
-    const plan =
-        port === undefined
-            ? RangeKill.planOfFolder(entries, listeners, ConfigFile.find(process.cwd()).folder, process.platform)
-            : RangeKill.planOfPort(entries, listeners, Number(port), () => RangeRegistry.pools());
+    const plan = killPlan(entries, listeners, arg);
     const visiblePids = plan.targets.flatMap(target => (target.pid === null ? [] : [target.pid]));
     const failures = ProcessTree.killTrees(visiblePids, plan.withRuns);
 
@@ -127,6 +126,18 @@ function killRange(port: string | undefined): void {
     if (failures.size > 0 || plan.targets.some(target => target.pid === null)) {
         process.exit(1);
     }
+}
+
+function killPlan(entries: RangeEntry[], listeners: PortListener[], arg: string | undefined): KillPlan {
+    if (arg === undefined) {
+        return RangeKill.planOfFolder(entries, listeners, ConfigFile.find(process.cwd()).folder, process.platform);
+    }
+
+    if (arg === "--orphans") {
+        return RangeKill.planOfOrphans(entries, listeners, RangeRegistry.pools());
+    }
+
+    return RangeKill.planOfPort(entries, listeners, Number(arg), () => RangeRegistry.pools());
 }
 
 async function releaseRange(folder: string | undefined): Promise<void> {
