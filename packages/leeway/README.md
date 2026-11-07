@@ -342,6 +342,73 @@ This is why `leeway env --export` prints nothing but plain `export NAME=port` li
 **Other agents** (Codex, Gemini CLI, Cursor, Copilot, Aider, ...): tell them in `AGENTS.md` to start servers with
 `leeway <command>`. Where the agent sets a marker, turning on the agent guard catches the times it forgets.
 
+## Recipes
+
+### Turbo
+
+Turbo 2 runs tasks in strict env mode by default: a task sees only the environment variables `turbo.json` lists. Under
+`leeway turbo dev`, turbo gets the ports but its tasks don't, so their servers start on default ports and collide. List the port names,
+here with a wildcard, and `LEEWAY_FOLDER`, so a `leeway` call inside a task runs on the same ports as a nested call:
+
+```json
+{
+    "globalPassThroughEnv": ["PORT_*", "LEEWAY_FOLDER"]
+}
+```
+
+Match the wildcard to your port names. Pass-through variables stay out of turbo's cache hash.
+
+### Frameworks with a port flag or `PORT`
+
+Pass the port with a placeholder:
+
+```json
+{
+    "scripts": {
+        "dev": "leeway next dev -p {{PORT_WEB}}"
+    }
+}
+```
+
+Servers that read `PORT` by convention, like Next.js and Nuxt, need no flag when the catalogue has a port named `PORT`: `leeway next dev`.
+
+### Playwright
+
+Run the tests as `leeway playwright test`. The config reads the ports with `devPorts`, and the `webServer` command `leeway vite` is a
+nested call, so it serves on the ports the tests use:
+
+```ts
+import { defineConfig } from "@playwright/test";
+import { devPorts } from "leeway";
+import config from "./leeway.json" with { type: "json" };
+
+const baseURL = `http://localhost:${devPorts(config).PORT_WEB}`;
+
+export default defineConfig({
+    use: { baseURL },
+    webServer: { command: "leeway vite", url: baseURL },
+});
+```
+
+### docker compose
+
+Compose fills `${PORT_DB}` from the environment, so run it as `leeway docker compose up`:
+
+```yaml
+services:
+    db:
+        image: postgres
+        ports: ["${PORT_DB}:5432"]
+```
+
+### direnv
+
+An `.envrc` that gives every shell in the folder its range, and with it any agent working there:
+
+```sh
+eval "$(npx leeway env --export)"
+```
+
 ## Limits
 
 - A hard kill of `leeway` itself (SIGKILL, Task Manager, `taskkill /F` on leeway alone) skips its cleanup and can leave the command

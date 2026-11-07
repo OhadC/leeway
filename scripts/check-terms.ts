@@ -21,6 +21,7 @@ const LOOKALIKES = new Set(["windows"]);
 const ALLOWED: Record<string, string[]> = {
     "GLOSSARY.md": ["*"],
     "scripts/check-terms.ts": ["*"],
+    "packages/leeway/README.md": ["service"],
     "packages/leeway/src/vite.ts": ["root"],
     "packages/leeway/src/vite.test.ts": ["root"],
     "packages/leeway/test/leeway-cli.ts": ["window"],

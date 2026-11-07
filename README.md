@@ -77,7 +77,8 @@ export default defineConfig({ plugins: [leeway({ config, port: "PORT_WEB" })] })
   them too.
 - **Placeholders**: `leeway curl http://localhost:{{PORT_API}}` puts the port in the command.
 - **Cleanup**: `leeway list` shows every range on the machine with what is listening, plus orphans left by deleted worktrees.
-  `leeway kill` stops a folder's servers, including the watcher that would restart them.
+  `leeway kill` stops a folder's servers, including the watcher that would restart them, and `leeway kill --orphans` every orphan.
+  `leeway release` gives a folder's range back to the pools.
 - **Agents**: `leeway env --export` in a Claude Code SessionStart hook gives every agent session its range up front. The opt-in agent
   guard makes `devPorts` refuse default ports in an agent shell that has none.
 - Linux, macOS and Windows. Node >= 22.18.
@@ -85,7 +86,7 @@ export default defineConfig({ plugins: [leeway({ config, port: "PORT_WEB" })] })
 ## Docs
 
 The full reference is in [packages/leeway/README.md](packages/leeway/README.md): config, how claims work, the vite plugin, every CLI
-command and mode, agent setup and known limits. Design decisions are in [docs/adr](docs/adr), terms in [GLOSSARY.md](GLOSSARY.md).
+command and mode, agent setup, recipes and known limits. Design decisions are in [docs/adr](docs/adr), terms in [GLOSSARY.md](GLOSSARY.md).
 
 ## Repo layout
 
