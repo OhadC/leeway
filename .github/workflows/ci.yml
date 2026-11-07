@@ -22,4 +22,5 @@ jobs:
             - run: pnpm install --frozen-lockfile
             - run: pnpm build
             - run: pnpm verify
+            - run: pnpm --filter leeway test:package
             - run: pnpm exec oxfmt --check .

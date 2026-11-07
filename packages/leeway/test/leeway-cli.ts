@@ -72,12 +72,21 @@ if (-not [Leeway.Console]::GenerateConsoleCtrlEvent(0, 0)) { exit 3 }`,
         );
     }
 
+    static env(home: string, extraEnv: Record<string, string>): NodeJS.ProcessEnv {
+        const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, USERPROFILE: home, ...extraEnv };
+
+        LeewayCli.inheritedToStrip.filter(name => !(name in extraEnv)).forEach(name => delete env[name]);
+
+        return env;
+    }
+
     private static readonly inheritedToStrip = [
         "CLAUDECODE",
         "GEMINI_CLI",
         "CURSOR_AGENT",
         "AI_AGENT",
         "VITEST",
+        "NODE_ENV",
         "LEEWAY_FOLDER",
         ...Object.keys(LeewayCli.config.ports),
     ];
@@ -96,13 +105,5 @@ if (-not [Leeway.Console]::GenerateConsoleCtrlEvent(0, 0)) { exit 3 }`,
         const encoded = Buffer.from(LeewayCli.windowsConsole + script, "utf16le").toString("base64");
 
         return spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], { env, encoding: "utf8" });
-    }
-
-    private static env(home: string, extraEnv: Record<string, string>): NodeJS.ProcessEnv {
-        const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, USERPROFILE: home, ...extraEnv };
-
-        LeewayCli.inheritedToStrip.filter(name => !(name in extraEnv)).forEach(name => delete env[name]);
-
-        return env;
     }
 }
