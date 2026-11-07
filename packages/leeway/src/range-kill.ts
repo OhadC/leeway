@@ -1,5 +1,6 @@
 import type { PortListener } from "./listener-scan.ts";
 import { type Pool, Pools } from "./pools.ts";
+import { RangeListing } from "./range-listing.ts";
 import { RangeRegistry, type RangeEntry } from "./range-registry.ts";
 
 export type KillPlan = {
@@ -44,6 +45,15 @@ export class RangeKill {
             scope: `orphan port ${port}`,
             names: {},
             targets: targetsOf(listeners.filter(listener => listener.port === port)),
+            withRuns: false,
+        };
+    }
+
+    static planOfOrphans(entries: RangeEntry[], listeners: PortListener[], pools: Pool[]): KillPlan {
+        return {
+            scope: `${Pools.text(pools)} outside every range`,
+            names: {},
+            targets: targetsOf(RangeListing.orphans(entries, listeners, pools)),
             withRuns: false,
         };
     }

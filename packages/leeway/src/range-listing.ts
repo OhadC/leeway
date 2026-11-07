@@ -34,11 +34,11 @@ export class RangeListing {
                     })),
             }));
 
-        const orphans = listeners.filter(
-            listener => Pools.holds(pools, listener.port) && !RangeRegistry.entryOfPort(entries, listener.port),
-        );
+        return { ranges, orphans: RangeListing.orphans(entries, listeners, pools) };
+    }
 
-        return { ranges, orphans };
+    static orphans(entries: RangeEntry[], listeners: PortListener[], pools: Pool[]): PortListener[] {
+        return listeners.filter(listener => Pools.holds(pools, listener.port) && !RangeRegistry.entryOfPort(entries, listener.port));
     }
 
     static render({ ranges, orphans }: Listing, pools: Pool[]): string {

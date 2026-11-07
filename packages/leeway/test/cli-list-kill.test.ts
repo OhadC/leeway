@@ -101,7 +101,7 @@ describe("leeway list and kill", () => {
 
     it("lists and kills an orphan listening in a pool the machine's owner set", async () => {
         const { dir, home } = LeewayCli.folder();
-        const orphanPort = await freePort();
+        const [orphanPort] = await freePorts(1);
         const server = await startServer(orphanPort);
 
         LeewayCli.run(["pools", "set", `${orphanPort}-${orphanPort}`], dir, home);
@@ -128,6 +128,53 @@ describe("leeway list and kill", () => {
         await new Promise(resolve => setTimeout(resolve, 1000));
         expect(await accepts(orphanPort)).toBe(false);
         expect(leeway.exitCode).toBeNull();
+    }, 60_000);
+
+    it("kills every orphan with --orphans, leaving what listens in a range", async () => {
+        const { dir, home } = LeewayCli.folder();
+        fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify({ ports: { PORT_WEB: { port: 5173 } } }));
+        const [rangePort, firstOrphanPort, secondOrphanPort] = await freePorts(3);
+        LeewayCli.run(["pools", "set", ...[rangePort, firstOrphanPort, secondOrphanPort].map(port => `${port}-${port}`)], dir, home);
+        LeewayCli.run(["env", "--export"], dir, home);
+        const inRange = await startServer(rangePort);
+        const firstOrphan = await startServer(firstOrphanPort);
+        const secondOrphan = await startServer(secondOrphanPort);
+
+        const result = LeewayCli.run(["kill", "--orphans"], home, home);
+
+        expect(result.stdout).toBe(
+            [
+                `leeway: ${rangePort}-${rangePort}, ${firstOrphanPort}-${firstOrphanPort}, ${secondOrphanPort}-${secondOrphanPort} outside every range`,
+                `  pid ${firstOrphan.pid}  ${firstOrphanPort}  killed`,
+                `  pid ${secondOrphan.pid}  ${secondOrphanPort}  killed`,
+                "",
+            ].join("\n"),
+        );
+        expect(await accepts(firstOrphanPort)).toBe(false);
+        expect(await accepts(secondOrphanPort)).toBe(false);
+        expect(await accepts(rangePort)).toBe(true);
+        expect(inRange.exitCode).toBeNull();
+    }, 60_000);
+
+    it("says so when there are no orphans, naming the pools", async () => {
+        const { dir, home } = LeewayCli.folder();
+        const [port] = await freePorts(1);
+        const pool = `${port}-${port}`;
+        LeewayCli.run(["pools", "set", pool], dir, home);
+
+        const result = LeewayCli.run(["kill", "--orphans"], dir, home);
+
+        expect(result.status).toBe(0);
+        expect(result.stdout).toBe(`leeway: nothing is listening in ${pool} outside every range\n`);
+    }, 60_000);
+
+    it("refuses --orphans with a port, printing the usage", () => {
+        const { home, ports } = claimedFolder();
+
+        const result = LeewayCli.run(["kill", "--orphans", String(ports.PORT_WEB)], home, home);
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toMatch(/^usage: leeway/);
     }, 60_000);
 
     it("kills the range holding a given port from any folder", async () => {
@@ -263,16 +310,15 @@ async function stopServer(server: ChildProcess): Promise<void> {
     await exited;
 }
 
-function freePort(): Promise<number> {
-    const server = net.createServer();
+async function freePorts(count: number): Promise<number[]> {
+    const holders = Array.from({ length: count }, () => net.createServer());
+    const ports = await Promise.all(
+        holders.map(holder => new Promise<number>(resolve => holder.listen(0, () => resolve((holder.address() as net.AddressInfo).port)))),
+    );
 
-    return new Promise(resolve => {
-        server.listen(0, () => {
-            const { port } = server.address() as net.AddressInfo;
+    await Promise.all(holders.map(holder => new Promise(resolve => holder.close(resolve))));
 
-            server.close(() => resolve(port));
-        });
-    });
+    return ports;
 }
 
 function accepts(port: number | undefined): Promise<boolean> {
