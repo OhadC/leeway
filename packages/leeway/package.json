@@ -15,7 +15,8 @@
         "node": ">=22.18"
     },
     "files": [
-        "dist"
+        "dist",
+        "schema.json"
     ],
     "bin": {
         "leeway": "./dist/cli.mjs"
@@ -35,7 +36,8 @@
     "exports": {
         ".": "./dist/index.mjs",
         "./vite": "./dist/vite.mjs",
-        "./package.json": "./package.json"
+        "./package.json": "./package.json",
+        "./schema.json": "./schema.json"
     },
     "peerDependencies": {
         "vite": ">=7"

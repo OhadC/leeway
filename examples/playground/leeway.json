@@ -1,4 +1,5 @@
 {
+    "$schema": "./node_modules/leeway/schema.json",
     "ports": {
         "PORT_WEB": { "port": 5173 },
         "PORT_API": { "port": 3001 }

@@ -185,11 +185,89 @@ describe("leeway <command>", () => {
     });
 });
 
+describe("leeway pools", () => {
+    it("shows the default pool, sets pools that the next claim places the range in, and resets to the default pool", () => {
+        const { dir, home } = temporaryFolder();
+
+        const before = LeewayCli.run(["pools"], dir, home);
+        const set = LeewayCli.run(["pools", "set", "41000-41999", "40000-40999"], dir, home);
+        const ports = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
+        const whileSet = LeewayCli.run(["pools"], dir, home);
+        const reset = LeewayCli.run(["pools", "reset"], dir, home);
+        const after = LeewayCli.run(["pools"], dir, home);
+
+        expect(before.stdout).toBe("21000-29999 (the default pool)\n");
+        expect(set.stdout).toBe("41000-41999\n40000-40999\n");
+        Object.values(ports).forEach(port => {
+            expect(port).toBeGreaterThanOrEqual(41000);
+            expect(port).toBeLessThanOrEqual(41999);
+        });
+        expect(whileSet.stdout).toBe("41000-41999\n40000-40999\n");
+        expect(reset.stdout).toBe("21000-29999 (the default pool)\n");
+        expect(after.stdout).toBe("21000-29999 (the default pool)\n");
+        expect([before, set, whileSet, reset, after].map(result => result.status)).toEqual([0, 0, 0, 0, 0]);
+    });
+
+    it("refuses pools it cannot read from the arguments, and writes nothing", () => {
+        const { dir, home } = temporaryFolder();
+
+        [
+            ["pools", "set"],
+            ["pools", "set", "41999-41000"],
+            ["pools", "set", "41000-41999", "41500-42500"],
+            ["pools", "set", "web"],
+        ].forEach(args => {
+            const result = LeewayCli.run(args, dir, home);
+
+            expect(result.status).toBe(1);
+            expect(result.stderr).toMatch(/^leeway: /);
+        });
+        expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
+    });
+
+    it("fails with a message to fix the pools when the registry's pools are unreadable", () => {
+        const { dir, home } = temporaryFolder();
+        fs.mkdirSync(path.join(home, ".leeway"));
+        fs.writeFileSync(path.join(home, ".leeway", "ranges.json"), JSON.stringify({ version: 1, pools: "41000-41999", folders: {} }));
+
+        [["pools"], ["env", "--export"]].forEach(args => {
+            const result = LeewayCli.run(args, dir, home);
+
+            expect(result.status).toBe(1);
+            expect(result.stdout).toBe("");
+            expect(result.stderr).toMatch(/^leeway: the pools in .*; fix it/);
+        });
+    });
+
+    it("runs a command named pools after --", () => {
+        const { dir, home } = temporaryFolder();
+        const script = process.platform === "win32" ? "pools.cmd" : "pools";
+        fs.writeFileSync(path.join(dir, script), process.platform === "win32" ? "@echo ran pools\r\n" : "#!/bin/sh\necho ran pools\n", {
+            mode: 0o755,
+        });
+        const pathName = Object.keys(process.env).find(name => name.toUpperCase() === "PATH") ?? "PATH";
+
+        const result = LeewayCli.run(["--", "pools"], dir, home, { [pathName]: `${dir}${path.delimiter}${process.env[pathName]}` });
+
+        expect(result.stdout.trim()).toBe("ran pools");
+        expect(result.status).toBe(0);
+    });
+});
+
 describe("leeway errors", () => {
     it("prints the usage and fails on a missing command, two modes or a misused subcommand", () => {
         const { dir, home } = temporaryFolder();
 
-        [[], ["--default"], ["--default", "--inherit", "vite"], ["env"], ["list", "all"], ["kill", "web"]].forEach(args => {
+        [
+            [],
+            ["--default"],
+            ["--default", "--inherit", "vite"],
+            ["env"],
+            ["list", "all"],
+            ["kill", "web"],
+            ["pools", "clear"],
+            ["pools", "reset", "now"],
+        ].forEach(args => {
             const result = LeewayCli.run(args, dir, home);
 
             expect(result.status).toBe(1);

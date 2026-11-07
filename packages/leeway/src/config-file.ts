@@ -1,11 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
+import schema from "../schema.json" with { type: "json" };
 import type { LeewayConfig } from "./dev-ports.ts";
 import { ExecCommand } from "./exec-command.ts";
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-const SETTINGS = ["ports", "agentGuard"];
+const SETTINGS = Object.keys(schema.properties).filter(key => key !== "$schema");
 
 const PORTS_SHAPE = '{ "NAME": { "port": <integer 1-65535> } }';
 
@@ -54,14 +55,18 @@ export class ConfigFile {
             throw new Error(`leeway: ${file} needs "ports": ${PORTS_SHAPE}`);
         }
 
-        for (const setting of Object.keys(content)) {
-            if (!SETTINGS.includes(setting)) {
-                throw new Error(`leeway: ${JSON.stringify(setting)} in ${file} is not a setting (${SETTINGS.join(", ")})`);
+        for (const key of Object.keys(content)) {
+            if (!Object.hasOwn(schema.properties, key)) {
+                throw new Error(`leeway: ${JSON.stringify(key)} in ${file} is not a setting (${SETTINGS.join(", ")})`);
             }
         }
 
         if (content.agentGuard !== undefined && typeof content.agentGuard !== "boolean") {
             throw new Error(`leeway: "agentGuard" in ${file} must be true or false`);
+        }
+
+        if (content.$schema !== undefined && typeof content.$schema !== "string") {
+            throw new Error(`leeway: "$schema" in ${file} must be a string`);
         }
 
         for (const [name, entry] of Object.entries(content.ports)) {

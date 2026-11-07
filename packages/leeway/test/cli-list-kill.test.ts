@@ -99,6 +99,20 @@ describe("leeway list and kill", () => {
         expect(await accepts(orphanPort)).toBe(false);
     }, 60_000);
 
+    it("lists and kills an orphan listening in a pool the machine's owner set", async () => {
+        const { dir, home } = LeewayCli.folder();
+        const orphanPort = await freePort();
+        const server = await startServer(orphanPort);
+
+        LeewayCli.run(["pools", "set", `${orphanPort}-${orphanPort}`], dir, home);
+        const listed = LeewayCli.run(["list"], dir, home);
+        const killed = LeewayCli.run(["kill", String(orphanPort)], dir, home);
+
+        expect(listed.stdout).toBe(`orphans (in a pool, outside every range)\n  ${orphanPort}  pid ${server.pid}\n`);
+        expect(killed.stdout).toBe(`leeway: orphan port ${orphanPort}\n  pid ${server.pid}  ${orphanPort}  killed\n`);
+        expect(await accepts(orphanPort)).toBe(false);
+    }, 60_000);
+
     it("kills only the listener on an orphan port, leaving the leeway run above it", async () => {
         const { dir, home, ports } = claimedFolder();
         const orphanPort = (ports.PORT_API ?? 0) + 100;
@@ -125,6 +139,20 @@ describe("leeway list and kill", () => {
         expect(result.status).toBe(0);
         expect(result.stdout).toContain(`pid ${server.pid}  PORT_WEB ${ports.PORT_WEB}  killed`);
         expect(await accepts(ports.PORT_WEB)).toBe(false);
+    }, 60_000);
+
+    it("kills the range holding a given port while the pools are unreadable, and refuses an orphan port", () => {
+        const { dir, home, ports } = claimedFolder();
+        const registryPath = path.join(home, ".leeway", "ranges.json");
+        fs.writeFileSync(registryPath, JSON.stringify({ ...JSON.parse(fs.readFileSync(registryPath, "utf8")), pools: "41000-41999" }));
+
+        const inRange = LeewayCli.run(["kill", String(ports.PORT_API)], home, home);
+        const orphan = LeewayCli.run(["kill", String((ports.PORT_API ?? 0) + 100)], home, home);
+
+        expect(inRange.status).toBe(0);
+        expect(inRange.stdout).toBe(`leeway: nothing is listening in ${shown(dir)}  ${ports.PORT_WEB}-${ports.PORT_API}\n`);
+        expect(orphan.status).toBe(1);
+        expect(orphan.stderr).toMatch(/^leeway: the pools in .*; fix it/);
     }, 60_000);
 
     it("says so when nothing listens in the range", () => {
@@ -168,6 +196,18 @@ async function stopServer(server: ChildProcess): Promise<void> {
 
     ProcessTree.killTreeQuietly(server.pid ?? 0);
     await exited;
+}
+
+function freePort(): Promise<number> {
+    const server = net.createServer();
+
+    return new Promise(resolve => {
+        server.listen(0, () => {
+            const { port } = server.address() as net.AddressInfo;
+
+            server.close(() => resolve(port));
+        });
+    });
 }
 
 function accepts(port: number | undefined): Promise<boolean> {

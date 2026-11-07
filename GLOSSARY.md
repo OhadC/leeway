@@ -30,19 +30,30 @@ The folder holding the nearest config; the unit that owns a range.
 _Avoid_: root, project, worktree, repo
 
 **Pool**:
-The fixed block of ports, 21000-29999, every range comes from; being in the pool is what makes a port leeway's.
-_Avoid_: port space, allocation range
+A block of ports ranges come from. The machine has one or more, set by its owner, else the default pool. A range never spans two, and
+being in a pool is what makes an unclaimed port presumed leeway's.
+_Avoid_: port space, allocation range, window
+
+**Default pool**:
+21000-29999, the pool of a machine whose owner set none.
 
 **Range**:
-A folder's contiguous block of ports from the pool, exactly as wide as its catalogue, one port per port name.
+A folder's contiguous block of ports. A claim places it inside one pool, exactly as wide as its catalogue, one port per port name; in the
+registry, a readable range holds its ports wherever it sits and whatever its width.
 _Avoid_: block, slot, allocation
 
+**Readable range**:
+A registry entry's `start`-`end` when both are ports 1-65535 with `start` ≤ `end`, whatever else the entry holds. Only a readable range
+holds ports; any other entry is passed through untouched.
+_Avoid_: usable range
+
 **Registry**:
-The machine-wide record of every folder's range, shared by every repo.
+The machine-wide record of the machine's pools and every folder's range, shared by every repo.
 _Avoid_: state, database, lockfile
 
 **Claim**:
-Taking a range for a folder: its current range when still usable, else the lowest usable gap. A range that changes on a claim has moved.
+Taking a range for a folder: its current range when still usable, else the first usable gap, pools in set order and each pool low to
+high. A range that changes on a claim has moved.
 _Avoid_: allocate, assign, lease, reserve
 
 **Living range**:
@@ -62,7 +73,7 @@ _Avoid_: template, variable, token
 ### Processes
 
 **Orphan**:
-A process listening on a pool port outside every living range, typically a server left behind by a deleted worktree.
+A process listening on a port in a pool, outside every living range, typically a server left behind by a deleted worktree.
 _Avoid_: stray, leftover, zombie
 
 ### Agents

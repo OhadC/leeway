@@ -1,4 +1,5 @@
 import type { PortListener } from "./listener-scan.ts";
+import { type Pool, Pools } from "./pools.ts";
 import { RangeRegistry, type RangeEntry } from "./range-registry.ts";
 
 export type ListedRange = Omit<RangeEntry, "ports"> & {
@@ -17,7 +18,7 @@ type ListedPort = {
 };
 
 export class RangeListing {
-    static collect(entries: RangeEntry[], listeners: PortListener[]): Listing {
+    static collect(entries: RangeEntry[], listeners: PortListener[], pools: Pool[]): Listing {
         const ranges = [...entries]
             .sort((left, right) => left.start - right.start)
             .map(entry => ({
@@ -34,22 +35,22 @@ export class RangeListing {
             }));
 
         const orphans = listeners.filter(
-            listener => RangeRegistry.isInPool(listener.port) && !RangeRegistry.entryOfPort(entries, listener.port),
+            listener => Pools.holds(pools, listener.port) && !RangeRegistry.entryOfPort(entries, listener.port),
         );
 
         return { ranges, orphans };
     }
 
-    static render({ ranges, orphans }: Listing): string {
+    static render({ ranges, orphans }: Listing, pools: Pool[]): string {
         if (ranges.length === 0 && orphans.length === 0) {
-            return `leeway: no ranges are registered and nothing is listening in ${RangeRegistry.POOL_START}-${RangeRegistry.POOL_END}\n`;
+            return `leeway: no ranges are registered and nothing is listening in ${Pools.text(pools)}\n`;
         }
 
         const blocks = ranges.map(RangeListing.renderRange);
 
         if (orphans.length > 0) {
             blocks.push(
-                ["orphans (in the pool, outside every range)", ...orphans.map(orphan => `  ${orphan.port}  ${pidCell([orphan.pid])}`)].join(
+                ["orphans (in a pool, outside every range)", ...orphans.map(orphan => `  ${orphan.port}  ${pidCell([orphan.pid])}`)].join(
                     "\n",
                 ),
             );

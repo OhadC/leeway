@@ -12,7 +12,10 @@ export default defineConfig([
         entry: { vite: "src/vite.ts", cli: "src/cli.ts" },
         platform: "node",
         dts: true,
-        exports: { exclude: ["cli"] },
+        exports: {
+            exclude: ["cli"],
+            customExports: { "./schema.json": "./schema.json" },
+        },
         deps: { neverBundle: ["vite"] },
     },
 ]);
