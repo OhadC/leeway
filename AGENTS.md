@@ -4,7 +4,7 @@ Per-folder dev port ranges. `packages/leeway` is the library + CLI; `examples/pl
 
 ## Commands
 
-- Done means `pnpm verify` is green (typecheck + lint + tests once, real exit code), plus `pnpm test:linux` when touching `process-tree.ts`, `listener-scan.ts`, `range-kill.ts` or `run-with-ports.ts`.
+- Done means `pnpm verify` is green (typecheck + lint + tests once, real exit code), plus `pnpm test:linux` when touching `process-tree.ts`, `listener-scan.ts`, `range-kill.ts` or `run-with-ports.ts`, and `pnpm test:package` when touching what gets published (`package.json`, `tsdown.config.ts`, the entries).
 - `pnpm lint` is oxlint + knip (unused exports, files, deps) + `scripts/check-terms.ts`.
 - Tests never need `pnpm build`: integration tests run `node src/cli.ts`.
 - Formatting runs on commit (oxfmt on staged files); CI checks it. Leave repo-wide `pnpm format` alone.

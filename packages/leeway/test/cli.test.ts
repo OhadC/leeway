@@ -185,6 +185,26 @@ describe("leeway <command>", () => {
     });
 });
 
+describe("leeway env --export from separate processes at once", () => {
+    it("gives each folder its own range in the pool, keeps every claim in the registry, and the same range on the next claim", async () => {
+        const home = LeewayCli.temporaryDir("leeway-home-");
+        const dirs = Array.from({ length: 8 }, () => LeewayCli.folder().dir);
+
+        const results = await Promise.all(dirs.map(dir => finished(LeewayCli.start(["env", "--export"], dir, home))));
+        const ranges = results.map(({ stdout }) => Object.values(LeewayCli.exportedPorts(stdout)));
+        const registry = JSON.parse(fs.readFileSync(path.join(home, ".leeway", "ranges.json"), "utf8"));
+
+        expect(results.map(({ code }) => code)).toEqual(dirs.map(() => 0));
+        ranges.flat().forEach(port => {
+            expect(port).toBeGreaterThanOrEqual(21000);
+            expect(port).toBeLessThanOrEqual(29999);
+        });
+        expect(new Set(ranges.flat()).size).toBe(ranges.flat().length);
+        expect(Object.keys(registry.folders)).toHaveLength(dirs.length);
+        dirs.forEach((dir, index) => expect(LeewayCli.run(["env", "--export"], dir, home).stdout).toBe(results[index]!.stdout));
+    }, 60_000);
+});
+
 describe("leeway pools", () => {
     it("shows the default pool, sets pools that the next claim places the range in, and resets to the default pool", () => {
         const { dir, home } = temporaryFolder();
@@ -418,6 +438,14 @@ function stopOwnConsoleLeeway({ pid, dir }: { pid: number; dir: string }): void 
     if (fs.existsSync(serverPid)) {
         spawnSync("taskkill", ["/PID", fs.readFileSync(serverPid, "utf8"), "/F"], { stdio: "ignore" });
     }
+}
+
+function finished(leeway: ChildProcess): Promise<{ code: number | null; stdout: string }> {
+    let stdout = "";
+
+    leeway.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+
+    return new Promise(resolve => leeway.once("close", code => resolve({ code, stdout })));
 }
 
 function listeningPort(leeway: ChildProcess): Promise<number> {

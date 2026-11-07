@@ -13,6 +13,7 @@
         "format": "oxfmt .",
         "verify": "pnpm -s typecheck && pnpm -s lint && pnpm -s test --run",
         "test:linux": "node scripts/test-linux.ts",
+        "test:package": "pnpm build && node scripts/test-package.ts",
         "prepare": "simple-git-hooks"
     },
     "simple-git-hooks": {
