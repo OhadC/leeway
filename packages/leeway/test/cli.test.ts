@@ -267,6 +267,8 @@ describe("leeway errors", () => {
             ["kill", "web"],
             ["pools", "clear"],
             ["pools", "reset", "now"],
+            ["release", "a", "b"],
+            ["release", "--json"],
         ].forEach(args => {
             const result = LeewayCli.run(args, dir, home);
 

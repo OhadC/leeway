@@ -165,6 +165,71 @@ describe("leeway list and kill", () => {
     }, 60_000);
 });
 
+describe("leeway release", () => {
+    it("releases this folder's range, so leeway list no longer shows it and the next claim takes the ports again", () => {
+        const { dir, home, ports } = claimedFolder();
+        const other = LeewayCli.folder().dir;
+        LeewayCli.run(["env", "--export"], other, home);
+
+        const result = LeewayCli.run(["release"], dir, home);
+        const listed = LeewayCli.run(["list", "--json"], dir, home);
+        const reclaimed = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], LeewayCli.folder().dir, home).stdout);
+
+        expect(result.status).toBe(0);
+        expect(result.stdout).toBe(`leeway: released ${ports.PORT_WEB}-${ports.PORT_API} for ${shown(dir)}\n`);
+        expect(JSON.parse(listed.stdout).ranges.map((range: { folder: string }) => range.folder)).toEqual([shown(other)]);
+        expect(reclaimed).toEqual(ports);
+    }, 60_000);
+
+    it("releases a folder given by path from anywhere, even once the folder is gone", () => {
+        const { dir, home, ports } = claimedFolder();
+        fs.rmSync(dir, { recursive: true, force: true });
+
+        const result = LeewayCli.run(["release", dir], home, home);
+
+        expect(result.status).toBe(0);
+        expect(result.stdout).toBe(`leeway: released ${ports.PORT_WEB}-${ports.PORT_API} for ${shown(dir)}\n`);
+    }, 60_000);
+
+    it("fails for a folder without a range and writes nothing", () => {
+        const { dir, home } = claimedFolder();
+        const registryPath = path.join(home, ".leeway", "ranges.json");
+        const before = fs.readFileSync(registryPath, "utf8");
+
+        const result = LeewayCli.run(["release", path.join(dir, "typo")], dir, home);
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toBe(`leeway: ${path.join(dir, "typo")} has no range\n`);
+        expect(fs.readFileSync(registryPath, "utf8")).toBe(before);
+    }, 60_000);
+
+    it("says what still listens in the released range is an orphan now, and leaves it running", async () => {
+        const { dir, home, ports } = claimedFolder();
+        const server = await startServer(ports.PORT_WEB);
+
+        const result = LeewayCli.run(["release"], dir, home);
+        const listed = LeewayCli.run(["list", "--json"], dir, home);
+
+        expect(result.stdout).toBe(
+            `leeway: released ${ports.PORT_WEB}-${ports.PORT_API} for ${shown(dir)}\n` +
+                `  pid ${server.pid}  ${ports.PORT_WEB}  still listening, now an orphan; stop it with leeway kill ${ports.PORT_WEB}\n`,
+        );
+        expect(await accepts(ports.PORT_WEB)).toBe(true);
+        expect(JSON.parse(listed.stdout).orphans).toEqual([{ port: ports.PORT_WEB, pid: server.pid }]);
+    }, 60_000);
+
+    it("calls no listener an orphan when the released range lies outside the pools", async () => {
+        const { dir, home, ports } = claimedFolder();
+        await startServer(ports.PORT_WEB);
+        LeewayCli.run(["pools", "set", "40000-40999"], dir, home);
+
+        const result = LeewayCli.run(["release"], dir, home);
+
+        expect(result.status).toBe(0);
+        expect(result.stdout).toBe(`leeway: released ${ports.PORT_WEB}-${ports.PORT_API} for ${shown(dir)}\n`);
+    }, 60_000);
+});
+
 function claimedFolder(): { dir: string; home: string; ports: Record<string, number> } {
     const { dir, home } = LeewayCli.folder();
     const ports = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);

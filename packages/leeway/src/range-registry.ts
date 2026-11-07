@@ -79,6 +79,14 @@ export class RangeRegistry {
         });
     }
 
+    static release(
+        folder: string,
+        platform: NodeJS.Platform = process.platform,
+        registryPath = RangeRegistry.defaultPath(os.homedir()),
+    ): Promise<RangeEntry> {
+        return RangeRegistry.whileLocked(registryPath, Date.now, () => RangeRegistry.releaseLocked(folder, platform, registryPath));
+    }
+
     static async testPort(port: number): Promise<PortBindState> {
         for (const host of BIND_HOSTS) {
             const code = await bindErrorCode(port, host);
@@ -141,7 +149,7 @@ export class RangeRegistry {
 
         if (!range) {
             throw new Error(
-                `leeway: no room for ${names.length} ports in ${Pools.text(pools)}; remove unused folders' ranges from ${registryPath} and try again`,
+                `leeway: no room for ${names.length} ports in ${Pools.text(pools)}; release unused folders' ranges with leeway release <folder> and try again`,
             );
         }
 
@@ -153,6 +161,25 @@ export class RangeRegistry {
         return { entry: { folder, ...range }, previous: current && { folder, ...current } };
     }
 
+    private static releaseLocked(folder: string, platform: NodeJS.Platform, registryPath: string): RangeEntry {
+        const registry = RangeRegistry.read(registryPath);
+        const entries = Object.entries(registry.folders);
+        const isOwn = ([key]: [string, unknown]) => RangeRegistry.isSameFolder(key, folder, platform);
+        const [released] = entries.filter(isOwn).flatMap(([key, value]) => {
+            const range = RangeRegistry.readableRange(value);
+
+            return range ? [{ folder: key, ...range }] : [];
+        });
+
+        if (!released) {
+            throw new Error(`leeway: ${folder} has no range`);
+        }
+
+        RangeRegistry.write(registryPath, { ...registry, folders: Object.fromEntries(entries.filter(pair => !isOwn(pair))) });
+
+        return released;
+    }
+
     private static async whileLocked<T>(registryPath: string, now: ClaimRangeOptions["now"], action: () => T | Promise<T>): Promise<T> {
         const lockPath = `${registryPath}.lock`;
         const owner = await RangeRegistry.acquireLock(lockPath, now);
@@ -160,7 +187,7 @@ export class RangeRegistry {
         try {
             return await action();
         } finally {
-            RangeRegistry.releaseLock(lockPath, owner);
+            RangeRegistry.unlock(lockPath, owner);
         }
     }
 
@@ -203,7 +230,7 @@ export class RangeRegistry {
         }
     }
 
-    private static releaseLock(lockPath: string, owner: string): void {
+    private static unlock(lockPath: string, owner: string): void {
         fs.rmSync(path.join(lockPath, owner), { force: true });
 
         try {

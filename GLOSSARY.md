@@ -56,6 +56,10 @@ Taking a range for a folder: its current range when still usable, else the first
 high. A range that changes on a claim has moved.
 _Avoid_: allocate, assign, lease, reserve
 
+**Release**:
+Dropping a folder's range from the registry, so its ports go back to the pools.
+_Avoid_: unclaim, deallocate
+
 **Living range**:
 A range whose folder still exists. Ranges of deleted folders stop counting and are dropped the next time a claim has to place a range.
 _Avoid_: active, valid, stale
