@@ -74,6 +74,10 @@ export class RangeKill {
         return [`leeway: ${scope}`, ...lines, ""].join("\n");
     }
 
+    static visiblePids({ targets }: KillPlan): number[] {
+        return targets.flatMap(target => (target.pid === null ? [] : [target.pid]));
+    }
+
     static failed({ targets }: KillPlan, failures: Map<number, string>): boolean {
         return failures.size > 0 || targets.some(target => target.pid === null);
     }

@@ -118,6 +118,23 @@ describe("RangeKill.planOfOrphans", () => {
             withRuns: false,
         });
     });
+
+    it("targets each orphan whose pid is hidden on its own", () => {
+        const listeners = [...LISTENERS, { port: 25000, pid: null }, { port: 25001, pid: null }];
+
+        expect(RangeKill.planOfOrphans([APP, TOOL], listeners, Pools.DEFAULT).targets).toEqual([
+            { pid: null, ports: [25000] },
+            { pid: null, ports: [25001] },
+        ]);
+    });
+});
+
+describe("RangeKill.visiblePids", () => {
+    it("gives the pids it can kill, leaving out the hidden ones", () => {
+        const plan = RangeKill.planOfPort([APP], [...LISTENERS, { port: 21001, pid: null }], 21000, defaultPools);
+
+        expect(RangeKill.visiblePids(plan)).toEqual([70, 60]);
+    });
 });
 
 describe("RangeKill.render", () => {
