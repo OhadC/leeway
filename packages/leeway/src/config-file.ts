@@ -30,7 +30,7 @@ export class ConfigFile {
         return { folder, config: ConfigFile.read(path.join(folder, ConfigFile.NAME)) };
     }
 
-    private static folderOf(from: string): string | undefined {
+    static folderOf(from: string): string | undefined {
         let current = path.resolve(from);
 
         while (!fs.existsSync(path.join(current, ConfigFile.NAME))) {

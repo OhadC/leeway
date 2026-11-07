@@ -236,19 +236,24 @@ pick the ports up.
 
 ### `leeway list [--json]`
 
-Every registered range on the machine, from every repo, with the pid listening on each port, followed by orphans: listeners in any of
-the machine's pools outside every range (for example a server left behind by a deleted worktree).
+Every registered range on the machine, from every repo, with the pid and short command listening on each port, followed by orphans:
+listeners in any of the machine's pools outside every range (for example a server left behind by a deleted worktree). The range of the
+folder you are in is marked `(this folder)`.
 
 ```text
-/home/me/app  21000-21001
-  PORT_WEB  21000  pid 4120
+/home/me/app  21000-21001  (this folder)
+  PORT_WEB  21000  pid 4120  node vite.js
   PORT_API  21001  -
 
 orphans (in a pool, outside every range)
-  21007  pid 5532
+  21007  pid 5532  node server.js --watch
 ```
 
-`--json` prints the same as JSON, for tools; read this rather than the registry, which may list deleted folders:
+The short command keeps the last path segment of each word, cut to 60 characters. Listing reads the process table, which takes a second
+or two on Windows.
+
+`--json` prints the same as JSON, with full command lines by pid, for tools; read this rather than the registry, which may list deleted
+folders:
 
 ```json
 {
@@ -263,7 +268,11 @@ orphans (in a pool, outside every range)
             ]
         }
     ],
-    "orphans": [{ "port": 21007, "pid": 5532 }]
+    "orphans": [{ "port": 21007, "pid": 5532 }],
+    "commands": {
+        "4120": "/usr/bin/node /home/me/app/node_modules/vite/bin/vite.js",
+        "5532": "/usr/bin/node /home/me/old/server.js --watch"
+    }
 }
 ```
 
