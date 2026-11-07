@@ -47,9 +47,16 @@ for (const file of files) {
     if (allowed.includes("*")) {
         continue;
     }
+    let inCodeBlock = false;
     fs.readFileSync(path.join(repoDir, file), "utf8")
         .split("\n")
         .forEach((line, index) => {
+            if (file.endsWith(".md") && line.trimStart().startsWith("```")) {
+                inCodeBlock = !inCodeBlock;
+            }
+            if (inCodeBlock) {
+                return;
+            }
             const prose = file.endsWith(".md") ? line.replace(/`[^`]*`/g, " ") : line;
             for (const [word, term] of wordsOf(prose).matchAll(pattern)) {
                 if (!allowed.includes(term!) && !LOOKALIKES.has(word)) {
