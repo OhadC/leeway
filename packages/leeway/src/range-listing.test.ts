@@ -111,6 +111,27 @@ describe("RangeListing.collect", () => {
             commands: {},
         });
     });
+
+    it("maps each listed pid to its full command line, skipping unlisted pids and empty command lines", () => {
+        const listing = RangeListing.collect(
+            [APP],
+            [
+                { port: 21000, pid: 40 },
+                { port: 21001, pid: 4 },
+                { port: 25000, pid: 50 },
+                { port: 4000, pid: 70 },
+            ],
+            Pools.DEFAULT,
+            [
+                { pid: 4, parent: 0, commandLine: "" },
+                { pid: 40, parent: 1, commandLine: "/usr/bin/node /home/me/app/vite.js" },
+                { pid: 50, parent: 1, commandLine: "node server.js" },
+                { pid: 70, parent: 1, commandLine: "node outside.js" },
+            ],
+        );
+
+        expect(listing.commands).toEqual({ "40": "/usr/bin/node /home/me/app/vite.js", "50": "node server.js" });
+    });
 });
 
 describe("RangeListing.render", () => {
@@ -207,29 +228,6 @@ describe("RangeListing.render", () => {
         expect(RangeListing.render(listing, Pools.DEFAULT, undefined, "linux")).toBe(
             ["C:\\dev\\tool  21002-21002", "  docs  21002  pid 60  node a.js", "               pid 61  node b.js", ""].join("\n"),
         );
-    });
-});
-
-describe("RangeListing.collect commands", () => {
-    it("maps each listed pid to its full command line, skipping unlisted pids and empty command lines", () => {
-        const listing = RangeListing.collect(
-            [APP],
-            [
-                { port: 21000, pid: 40 },
-                { port: 21001, pid: 4 },
-                { port: 25000, pid: 50 },
-                { port: 4000, pid: 70 },
-            ],
-            Pools.DEFAULT,
-            [
-                { pid: 4, parent: 0, commandLine: "" },
-                { pid: 40, parent: 1, commandLine: "/usr/bin/node /home/me/app/vite.js" },
-                { pid: 50, parent: 1, commandLine: "node server.js" },
-                { pid: 70, parent: 1, commandLine: "node outside.js" },
-            ],
-        );
-
-        expect(listing.commands).toEqual({ "40": "/usr/bin/node /home/me/app/vite.js", "50": "node server.js" });
     });
 });
 

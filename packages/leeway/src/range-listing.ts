@@ -19,10 +19,10 @@ type ListedPort = {
     pids: (number | null)[];
 };
 
-const SHORT_COMMAND_LENGTH = 60;
-
 export class RangeListing {
-    static collect(entries: RangeEntry[], listeners: PortListener[], pools: Pool[], rows: ProcessRow[]): Listing {
+    private static readonly SHORT_COMMAND_LENGTH = 60;
+
+    static collect(entries: RangeEntry[], listeners: PortListener[], pools: Pool[], processRows: ProcessRow[]): Listing {
         const ranges = [...entries]
             .sort((left, right) => left.start - right.start)
             .map(entry => ({
@@ -43,7 +43,7 @@ export class RangeListing {
             ...orphans.map(orphan => orphan.pid),
         ]);
         const commands = Object.fromEntries(
-            rows.filter(row => listedPids.has(row.pid) && row.commandLine !== "").map(row => [String(row.pid), row.commandLine]),
+            processRows.filter(row => listedPids.has(row.pid) && row.commandLine !== "").map(row => [String(row.pid), row.commandLine]),
         );
 
         return { ranges, orphans, commands };
@@ -82,7 +82,7 @@ export class RangeListing {
         const tokens = commandLine.match(/(?:"[^"]*"|[^\s"])+/g) ?? [];
         const short = tokens.map(token => token.replaceAll('"', "").split(/[\\/]/).at(-1)).join(" ");
 
-        return short.length > SHORT_COMMAND_LENGTH ? `${short.slice(0, SHORT_COMMAND_LENGTH - 1)}…` : short;
+        return short.length > RangeListing.SHORT_COMMAND_LENGTH ? `${short.slice(0, RangeListing.SHORT_COMMAND_LENGTH - 1)}…` : short;
     }
 
     private static renderRange(range: ListedRange, commands: Record<string, string>, isThisFolder: boolean): string {
@@ -105,7 +105,11 @@ function listenerLines(prefix: string, pids: (number | null)[], commands: Record
 }
 
 function listenerCell(pid: number | null, commands: Record<string, string>): string {
-    const commandLine = pid === null ? undefined : commands[pid];
+    if (pid === null) {
+        return "pid ?";
+    }
 
-    return commandLine === undefined ? `pid ${pid ?? "?"}` : `pid ${pid}  ${RangeListing.shortCommand(commandLine)}`;
+    const commandLine = commands[pid];
+
+    return commandLine === undefined ? `pid ${pid}` : `pid ${pid}  ${RangeListing.shortCommand(commandLine)}`;
 }
