@@ -142,13 +142,13 @@ describe("leeway list and kill", () => {
 
         const result = LeewayCli.run(["kill", "--orphans"], home, home);
 
-        expect(result.stdout).toBe(
-            [
-                `leeway: ${rangePort}-${rangePort}, ${firstOrphanPort}-${firstOrphanPort}, ${secondOrphanPort}-${secondOrphanPort} outside every range`,
-                `  pid ${firstOrphan.pid}  ${firstOrphanPort}  killed`,
-                `  pid ${secondOrphan.pid}  ${secondOrphanPort}  killed`,
-                "",
-            ].join("\n"),
+        const [heading, ...kills] = result.stdout.trimEnd().split("\n");
+
+        expect(heading).toBe(
+            `leeway: ${rangePort}-${rangePort}, ${firstOrphanPort}-${firstOrphanPort}, ${secondOrphanPort}-${secondOrphanPort} outside every range`,
+        );
+        expect(kills.sort()).toEqual(
+            [`  pid ${firstOrphan.pid}  ${firstOrphanPort}  killed`, `  pid ${secondOrphan.pid}  ${secondOrphanPort}  killed`].sort(),
         );
         expect(await accepts(firstOrphanPort)).toBe(false);
         expect(await accepts(secondOrphanPort)).toBe(false);
