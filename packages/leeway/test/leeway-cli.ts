@@ -1,7 +1,10 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { randomInt } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { Pool } from "../src/pools.ts";
+import { RangeRegistry } from "../src/range-registry.ts";
 
 export class LeewayCli {
     static readonly config = { ports: { PORT_WEB: { port: 5173 }, PORT_API: { port: 3001 } } };
@@ -41,13 +44,20 @@ if (-not [Leeway.Console]::GenerateConsoleCtrlEvent(0, 0)) { exit 3 }`,
         ).status;
     }
 
-    static folder(): { dir: string; home: string } {
+    static folder(): { dir: string; home: string; pool: Pool } {
         const dir = LeewayCli.temporaryDir("leeway-folder-");
         const home = LeewayCli.temporaryDir("leeway-home-");
+        const pool = LeewayCli.privatePool();
 
         fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify(LeewayCli.config));
+        fs.mkdirSync(path.dirname(RangeRegistry.defaultPath(home)));
+        fs.writeFileSync(RangeRegistry.defaultPath(home), JSON.stringify({ version: 1, pools: [pool], folders: {} }));
 
-        return { dir, home };
+        return { dir, home, pool };
+    }
+
+    static claimedFolders(home: string): string[] {
+        return Object.keys(JSON.parse(fs.readFileSync(RangeRegistry.defaultPath(home), "utf8")).folders);
     }
 
     static temporaryDir(prefix: string): string {
@@ -92,6 +102,19 @@ if (-not [Leeway.Console]::GenerateConsoleCtrlEvent(0, 0)) { exit 3 }`,
     ];
 
     private static readonly temporaryDirs: string[] = [];
+
+    private static readonly privatePoolsStart = 30000;
+
+    private static readonly privatePoolWidth = 100;
+
+    private static readonly lowestLinuxEphemeralPort = 32768;
+
+    private static privatePool(): Pool {
+        const poolCount = Math.floor((LeewayCli.lowestLinuxEphemeralPort - LeewayCli.privatePoolsStart) / LeewayCli.privatePoolWidth);
+        const start = LeewayCli.privatePoolsStart + LeewayCli.privatePoolWidth * randomInt(poolCount);
+
+        return { start, end: start + LeewayCli.privatePoolWidth - 1 };
+    }
 
     private static readonly windowsConsole = `Add-Type -Name Console -Namespace Leeway -MemberDefinition @'
 [DllImport("kernel32.dll")] public static extern bool FreeConsole();

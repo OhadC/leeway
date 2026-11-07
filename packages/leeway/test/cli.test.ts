@@ -4,6 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { Pools } from "../src/pools.ts";
+import { RangeRegistry } from "../src/range-registry.ts";
 import { LeewayCli } from "./leeway-cli.ts";
 
 const SERVER =
@@ -37,7 +38,7 @@ afterEach(async () => {
 
 describe("leeway env --export", () => {
     it("prints only export lines of ports claimed in the pool, and the same ports on the next call", () => {
-        const { dir, home } = temporaryFolder();
+        const { dir, home, pool } = temporaryFolder();
 
         const first = LeewayCli.run(["env", "--export"], dir, home);
         const second = LeewayCli.run(["env", "--export"], dir, home);
@@ -45,11 +46,8 @@ describe("leeway env --export", () => {
         expect(first.status).toBe(0);
         expect(first.stdout).toMatch(/^(export [A-Z_][A-Z0-9_]*=\d+\n)+$/);
         expect(Object.keys(LeewayCli.exportedPorts(first.stdout))).toEqual(["PORT_WEB", "PORT_API"]);
-        Object.values(LeewayCli.exportedPorts(first.stdout)).forEach(port => {
-            expect(port).toBeGreaterThanOrEqual(21000);
-            expect(port).toBeLessThanOrEqual(29999);
-        });
-        expect(fs.existsSync(path.join(home, ".leeway", "ranges.json"))).toBe(true);
+        expect(Object.values(LeewayCli.exportedPorts(first.stdout)).filter(port => !Pools.holds([pool], port))).toEqual([]);
+        expect(LeewayCli.claimedFolders(home)).toHaveLength(1);
         expect(second.stdout).toBe(first.stdout);
     });
 
@@ -97,7 +95,7 @@ describe("leeway env", () => {
         const result = LeewayCli.run(["env"], dir, home, { LEEWAY_FOLDER: dir, PORT_WEB: "24000", PORT_API: "24001" });
 
         expect(result.stdout).toBe("PORT_WEB=24000\nPORT_API=24001\n");
-        expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
+        expect(LeewayCli.claimedFolders(home)).toEqual([]);
     });
 });
 
@@ -149,7 +147,7 @@ describe("leeway <command>", () => {
         expect(result.stdout).toBe("argument 5173, env 5173 3001\n");
         expect(agent.stdout).toBe("argument 5173, env 5173 3001\n");
         expect(result.stderr).toContain("PORT_API  3001");
-        expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
+        expect(LeewayCli.claimedFolders(home)).toEqual([]);
     });
 
     it("claims the folder's range over ports already in the environment, and in an agent shell", () => {
@@ -170,7 +168,7 @@ describe("leeway <command>", () => {
         expect(LeewayCli.run(["--inherit", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home).stdout).toBe(
             "argument 5173, env 5173 3001\n",
         );
-        expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
+        expect(LeewayCli.claimedFolders(home)).toEqual([]);
     });
 
     it("a nested claim for the same folder runs on the outer call's ports, claimed or default, without a second table", () => {
@@ -210,24 +208,24 @@ describe("leeway <command>", () => {
 
 describe("leeway env --export from separate processes at once", () => {
     it("gives each folder its own range in the pool, keeps every claim in the registry, and the same range on the next claim", async () => {
-        const home = LeewayCli.temporaryDir("leeway-home-");
+        const { home, pool } = LeewayCli.folder();
         const dirs = Array.from({ length: 8 }, () => LeewayCli.folder().dir);
 
         const results = await Promise.all(dirs.map(dir => finished(LeewayCli.start(["env", "--export"], dir, home))));
         const ranges = results.map(({ stdout }) => Object.values(LeewayCli.exportedPorts(stdout)));
-        const registry = JSON.parse(fs.readFileSync(path.join(home, ".leeway", "ranges.json"), "utf8"));
 
         expect(results.map(({ code }) => code)).toEqual(dirs.map(() => 0));
-        expect(ranges.flat().filter(port => !Pools.holds(Pools.DEFAULT, port))).toEqual([]);
+        expect(ranges.flat().filter(port => !Pools.holds([pool], port))).toEqual([]);
         expect(new Set(ranges.flat()).size).toBe(ranges.flat().length);
-        expect(Object.keys(registry.folders)).toHaveLength(dirs.length);
+        expect(LeewayCli.claimedFolders(home)).toHaveLength(dirs.length);
         dirs.forEach((dir, index) => expect(LeewayCli.run(["env", "--export"], dir, home).stdout).toBe(results[index]!.stdout));
     }, 60_000);
 });
 
 describe("leeway pools", () => {
     it("shows the default pool, sets pools that the next claim places the range in, and resets to the default pool", () => {
-        const { dir, home } = temporaryFolder();
+        const { dir } = temporaryFolder();
+        const home = LeewayCli.temporaryDir("leeway-home-");
 
         const before = LeewayCli.run(["pools"], dir, home);
         const set = LeewayCli.run(["pools", "set", "41000-41999", "40000-40999"], dir, home);
@@ -250,6 +248,7 @@ describe("leeway pools", () => {
 
     it("refuses pools it cannot read from the arguments, and writes nothing", () => {
         const { dir, home } = temporaryFolder();
+        const before = fs.readFileSync(RangeRegistry.defaultPath(home), "utf8");
 
         [
             ["pools", "set"],
@@ -262,13 +261,12 @@ describe("leeway pools", () => {
             expect(result.status).toBe(1);
             expect(result.stderr).toMatch(/^leeway: /);
         });
-        expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
+        expect(fs.readFileSync(RangeRegistry.defaultPath(home), "utf8")).toBe(before);
     });
 
     it("fails with a message to fix the pools when the registry's pools are unreadable", () => {
         const { dir, home } = temporaryFolder();
-        fs.mkdirSync(path.join(home, ".leeway"));
-        fs.writeFileSync(path.join(home, ".leeway", "ranges.json"), JSON.stringify({ version: 1, pools: "41000-41999", folders: {} }));
+        fs.writeFileSync(RangeRegistry.defaultPath(home), JSON.stringify({ version: 1, pools: "41000-41999", folders: {} }));
 
         [["pools"], ["env", "--export"]].forEach(args => {
             const result = LeewayCli.run(args, dir, home);
@@ -329,7 +327,7 @@ describe("leeway errors", () => {
             expect(result.stdout).toMatch(/^usage: leeway \[--default \| --inherit\]/);
         });
         expect(LeewayCli.run(["--version"], dir, home).stdout).toBe(`${version}\n`);
-        expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
+        expect(LeewayCli.claimedFolders(home)).toEqual([]);
     });
 
     it("prints the usage and fails on a flag it does not know before the command, without claiming or running", () => {
@@ -342,7 +340,7 @@ describe("leeway errors", () => {
             expect(result.stdout).toBe("");
             expect(result.stderr).toMatch(/^usage: leeway /);
         });
-        expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
+        expect(LeewayCli.claimedFolders(home)).toEqual([]);
     });
 
     it("fails on a {{NAME}} that is not in the catalogue, naming it and the catalogue, without claiming or running", () => {
@@ -353,7 +351,7 @@ describe("leeway errors", () => {
         expect(result.status).toBe(1);
         expect(result.stdout).toBe("");
         expect(result.stderr).toBe("leeway: unknown {{PORT_WBE}} in the command; the catalogue has PORT_WEB, PORT_API\n");
-        expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
+        expect(LeewayCli.claimedFolders(home)).toEqual([]);
     });
 
     it("--inherit gives an agent shell without ports the default ports, unless the config turns the agent guard on", () => {
@@ -419,7 +417,7 @@ process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1
 `;
 }
 
-function temporaryFolder(): { dir: string; home: string } {
+function temporaryFolder() {
     const folder = LeewayCli.folder();
 
     Object.entries(FIXTURES).forEach(([name, source]) => fs.writeFileSync(path.join(folder.dir, name), source));

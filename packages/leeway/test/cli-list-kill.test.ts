@@ -4,6 +4,7 @@ import net from "node:net";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ProcessTree } from "../src/process-tree.ts";
+import { RangeRegistry } from "../src/range-registry.ts";
 import { LeewayCli } from "./leeway-cli.ts";
 
 const SERVER = 'require("node:net").createServer().listen(Number(process.argv[1]), () => console.log("listening"));';
@@ -88,8 +89,8 @@ describe("leeway list and kill", () => {
     }, 60_000);
 
     it("kills an orphan listening in the pool outside every range", async () => {
-        const { home, ports } = claimedFolder();
-        const orphanPort = (ports.PORT_API ?? 0) + 100;
+        const { home, pool } = claimedFolder();
+        const orphanPort = pool.end;
         const server = await startServer(orphanPort);
 
         const result = LeewayCli.run(["kill", String(orphanPort)], home, home);
@@ -114,8 +115,8 @@ describe("leeway list and kill", () => {
     }, 60_000);
 
     it("kills only the listener on an orphan port, leaving the leeway run above it", async () => {
-        const { dir, home, ports } = claimedFolder();
-        const orphanPort = (ports.PORT_API ?? 0) + 100;
+        const { dir, home, pool } = claimedFolder();
+        const orphanPort = pool.end;
         fs.writeFileSync(path.join(dir, "keeper.mjs"), KEEPER);
         const leeway = LeewayCli.start(["node", "keeper.mjs", String(orphanPort)], dir, home);
 
@@ -190,7 +191,7 @@ describe("leeway list and kill", () => {
 
     it("kills the range holding a given port while the pools are unreadable, and refuses an orphan port", () => {
         const { dir, home, ports } = claimedFolder();
-        const registryPath = path.join(home, ".leeway", "ranges.json");
+        const registryPath = RangeRegistry.defaultPath(home);
         fs.writeFileSync(registryPath, JSON.stringify({ ...JSON.parse(fs.readFileSync(registryPath, "utf8")), pools: "41000-41999" }));
 
         const inRange = LeewayCli.run(["kill", String(ports.PORT_API)], home, home);
@@ -240,7 +241,7 @@ describe("leeway release", () => {
 
     it("fails for a folder without a range and writes nothing", () => {
         const { dir, home } = claimedFolder();
-        const registryPath = path.join(home, ".leeway", "ranges.json");
+        const registryPath = RangeRegistry.defaultPath(home);
         const before = fs.readFileSync(registryPath, "utf8");
 
         const result = LeewayCli.run(["release", path.join(dir, "typo")], dir, home);
@@ -277,11 +278,11 @@ describe("leeway release", () => {
     }, 60_000);
 });
 
-function claimedFolder(): { dir: string; home: string; ports: Record<string, number> } {
-    const { dir, home } = LeewayCli.folder();
-    const ports = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
+function claimedFolder() {
+    const folder = LeewayCli.folder();
+    const ports = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], folder.dir, folder.home).stdout);
 
-    return { dir, home, ports };
+    return { ...folder, ports };
 }
 
 function shown(dir: string): string {
