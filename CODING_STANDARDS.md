@@ -30,7 +30,7 @@ Order a module by how a reader arrives: exported and public members first, priva
 
 ### Code that explains itself
 
-Rename or extract until the code reads plainly. The code carries no comments, doc comments included.
+Rename or extract until the code reads plainly. The code carries no comments, with one exception: what a package entry (`index.ts`, `vite.ts`) exports gets JSDoc stating the behaviour its signature can't show. The built `.d.mts` types keep that JSDoc, and they are the only docs an agent in a consumer's repo reads.
 
 ### Glossary terms
 
