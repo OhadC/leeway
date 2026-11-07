@@ -211,12 +211,25 @@ configuration whose `preLaunchTask` writes the file:
 
 ```jsonc
 // .vscode/tasks.json
-{ "version": "2.0.0", "tasks": [{ "label": "leeway env", "type": "shell", "command": "npx leeway env > .leeway.env" }] }
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "leeway env",
+            "type": "shell",
+            "command": "npx leeway env > .leeway.env",
+            "windows": { "options": { "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] } } }
+        }
+    ]
+}
 
 // .vscode/launch.json, in a configuration
 "preLaunchTask": "leeway env",
 "envFile": "${workspaceFolder}/.leeway.env"
 ```
+
+The task runs under `cmd.exe` on Windows because Windows PowerShell's `>` writes UTF-16, or UTF-8 with a byte order mark, and
+dotenv readers expect plain text.
 
 Use `eval "$(leeway env --export)"` to give a shell its range, after which `devPorts` and tools started without `leeway`
 pick the ports up.
