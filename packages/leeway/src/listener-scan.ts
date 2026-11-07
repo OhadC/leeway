@@ -2,7 +2,7 @@ import { type CommandRunner, OsCommand } from "./os-command.ts";
 
 export type PortListener = {
     port: number;
-    pid: number;
+    pid: number | null;
 };
 
 export class ListenerScan {
@@ -10,7 +10,7 @@ export class ListenerScan {
         const scanned = ListenerScan.scan(platform, run);
         const distinct = new Map(scanned.map(listener => [`${listener.port}:${listener.pid}`, listener]));
 
-        return Array.from(distinct.values()).sort((left, right) => left.port - right.port || left.pid - right.pid);
+        return Array.from(distinct.values()).sort((left, right) => left.port - right.port || (left.pid ?? 0) - (right.pid ?? 0));
     }
 
     private static scan(platform: NodeJS.Platform, run: CommandRunner): PortListener[] {
@@ -42,8 +42,9 @@ export class ListenerScan {
             const localAddress = line.trim().split(/\s+/)[3] ?? "";
             const port = /:(\d+)$/.exec(localAddress)?.[1];
             const pids = Array.from(line.matchAll(/,pid=(\d+),/g), match => Number(match[1]));
+            const pidsOrHidden = pids.length > 0 ? pids : [null];
 
-            return port === undefined ? [] : pids.map(pid => ({ port: Number(port), pid }));
+            return port === undefined ? [] : pidsOrHidden.map(pid => ({ port: Number(port), pid }));
         });
     }
 

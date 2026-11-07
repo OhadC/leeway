@@ -11,7 +11,7 @@ export type KillPlan = {
 };
 
 type KillTarget = {
-    pid: number;
+    pid: number | null;
     ports: number[];
 };
 
@@ -66,12 +66,20 @@ export class RangeKill {
         const nameOfPort = new Map(Object.entries(names).map(([name, port]) => [port, name]));
         const lines = targets.map(target => {
             const ports = target.ports.map(port => [nameOfPort.get(port), port].filter(Boolean).join(" ")).join(", ");
-            const failure = failures.get(target.pid);
+            const failure = target.pid === null ? "pid hidden, run with sudo to kill it" : failures.get(target.pid);
 
-            return `  pid ${target.pid}  ${ports}  ${failure === undefined ? "killed" : `failed: ${failure}`}`;
+            return `  pid ${target.pid ?? "?"}  ${ports}  ${failure === undefined ? "killed" : `failed: ${failure}`}`;
         });
 
         return [`leeway: ${scope}`, ...lines, ""].join("\n");
+    }
+
+    static visiblePids({ targets }: KillPlan): number[] {
+        return targets.flatMap(target => (target.pid === null ? [] : [target.pid]));
+    }
+
+    static failed({ targets }: KillPlan, failures: Map<number, string>): boolean {
+        return failures.size > 0 || targets.some(target => target.pid === null);
     }
 
     private static planOfEntry(entry: RangeEntry, listeners: PortListener[]): KillPlan {
@@ -86,12 +94,15 @@ export class RangeKill {
 
 function targetsOf(listeners: PortListener[]): KillTarget[] {
     const byPid = new Map<number, KillTarget>();
+    const hiddenTargets: KillTarget[] = [];
 
-    listeners.forEach(listener => {
-        const target = byPid.get(listener.pid) ?? { pid: listener.pid, ports: [] };
-
-        byPid.set(listener.pid, { ...target, ports: [...target.ports, listener.port] });
+    listeners.forEach(({ pid, port }) => {
+        if (pid === null) {
+            hiddenTargets.push({ pid, ports: [port] });
+        } else {
+            byPid.set(pid, { pid, ports: [...(byPid.get(pid)?.ports ?? []), port] });
+        }
     });
 
-    return Array.from(byPid.values());
+    return [...byPid.values(), ...hiddenTargets];
 }

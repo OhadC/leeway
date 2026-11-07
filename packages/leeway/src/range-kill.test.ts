@@ -118,6 +118,23 @@ describe("RangeKill.planOfOrphans", () => {
             withRuns: false,
         });
     });
+
+    it("targets each orphan whose pid is hidden on its own", () => {
+        const listeners = [...LISTENERS, { port: 25000, pid: null }, { port: 25001, pid: null }];
+
+        expect(RangeKill.planOfOrphans([APP, TOOL], listeners, Pools.DEFAULT).targets).toEqual([
+            { pid: null, ports: [25000] },
+            { pid: null, ports: [25001] },
+        ]);
+    });
+});
+
+describe("RangeKill.visiblePids", () => {
+    it("gives the pids it can kill, leaving out the hidden ones", () => {
+        const plan = RangeKill.planOfPort([APP], [...LISTENERS, { port: 21001, pid: null }], 21000, defaultPools);
+
+        expect(RangeKill.visiblePids(plan)).toEqual([70, 60]);
+    });
 });
 
 describe("RangeKill.render", () => {
@@ -129,6 +146,22 @@ describe("RangeKill.render", () => {
                 "leeway: c:\\dev\\app  21000-21002",
                 "  pid 70  web 21000, docs 21002  killed",
                 "  pid 60  api 21001  failed: access denied",
+                "",
+            ].join("\n"),
+        );
+    });
+
+    it("reports listeners whose pid is hidden as failed, with a hint to run with sudo", () => {
+        const listeners = [...LISTENERS, { port: 21000, pid: null }, { port: 21001, pid: null }];
+        const plan = RangeKill.planOfPort([APP], listeners, 21000, defaultPools);
+
+        expect(RangeKill.render(plan, new Map())).toBe(
+            [
+                "leeway: c:\\dev\\app  21000-21002",
+                "  pid 70  web 21000, docs 21002  killed",
+                "  pid 60  api 21001  killed",
+                "  pid ?  web 21000  failed: pid hidden, run with sudo to kill it",
+                "  pid ?  api 21001  failed: pid hidden, run with sudo to kill it",
                 "",
             ].join("\n"),
         );
@@ -156,5 +189,21 @@ describe("RangeKill.render", () => {
         expect(RangeKill.render(RangeKill.planOfPort([APP], [], 21000, defaultPools), new Map())).toBe(
             "leeway: nothing is listening in c:\\dev\\app  21000-21002\n",
         );
+    });
+});
+
+describe("RangeKill.failed", () => {
+    it("fails when a pid could not be killed", () => {
+        expect(RangeKill.failed(RangeKill.planOfPort([APP], LISTENERS, 21000, defaultPools), new Map([[60, "access denied"]]))).toBe(true);
+    });
+
+    it("fails when a listener's pid is hidden, even if every visible pid was killed", () => {
+        const plan = RangeKill.planOfPort([APP], [...LISTENERS, { port: 21001, pid: null }], 21000, defaultPools);
+
+        expect(RangeKill.failed(plan, new Map())).toBe(true);
+    });
+
+    it("succeeds when every listener was killed", () => {
+        expect(RangeKill.failed(RangeKill.planOfPort([APP], LISTENERS, 21000, defaultPools), new Map())).toBe(false);
     });
 });
