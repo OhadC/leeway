@@ -23,14 +23,24 @@ describe("devPorts", () => {
         expect(devPorts(config, { PORT_API: 21001 }).PORT_API).toBe(21001);
     });
 
-    it("falls back to the default port when the variable is empty or not a port number", () => {
-        expect(devPorts(config, { PORT_WEB: "65535" }).PORT_WEB).toBe(65535);
-        expect(devPorts(config, { PORT_WEB: "65536" }).PORT_WEB).toBe(5173);
+    it("accepts the edges of the port numbers", () => {
+        expect(devPorts(config, { PORT_WEB: "1", PORT_API: "65535" })).toEqual({ PORT_WEB: 1, PORT_API: 65535 });
+    });
+
+    it("gives the default port when the variable is empty", () => {
         expect(devPorts(config, { PORT_WEB: "" }).PORT_WEB).toBe(5173);
-        expect(devPorts(config, { PORT_WEB: "not-a-port" }).PORT_WEB).toBe(5173);
-        expect(devPorts(config, { PORT_WEB: "-1" }).PORT_WEB).toBe(5173);
-        expect(devPorts(config, { PORT_WEB: "0" }).PORT_WEB).toBe(5173);
-        expect(devPorts(config, { PORT_WEB: "21000.5" }).PORT_WEB).toBe(5173);
+    });
+
+    it("throws on a non-numeric value, naming the port name and the value", () => {
+        expect(() => devPorts(config, { PORT_API: "abc" })).toThrowError('leeway: PORT_API is "abc", not a port 1-65535');
+    });
+
+    it.each(["0", "-1", "65536", "70000", "21000.5", " "])("throws on %j, which is not a port 1-65535", value => {
+        expect(() => devPorts(config, { PORT_WEB: value })).toThrowError(`leeway: PORT_WEB is "${value}", not a port 1-65535`);
+    });
+
+    it("throws on an injected number that is not a port", () => {
+        expect(() => devPorts(config, { PORT_API: 70000 })).toThrowError('leeway: PORT_API is "70000", not a port 1-65535');
     });
 });
 
@@ -69,6 +79,12 @@ describe("devPorts default environment", () => {
         vi.stubGlobal("LEEWAY_ENV", { PORT_API: 21001 });
 
         expect(devPorts(config)).toEqual({ PORT_WEB: 5173, PORT_API: 21001 });
+    });
+
+    it("throws on a malformed port injected through LEEWAY_ENV", () => {
+        vi.stubGlobal("LEEWAY_ENV", { PORT_API: "abc" });
+
+        expect(() => devPorts(config)).toThrowError('leeway: PORT_API is "abc", not a port 1-65535');
     });
 
     it("lets process.env win over injected ports", () => {
