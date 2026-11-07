@@ -174,3 +174,19 @@ describe("RangeKill.render", () => {
         );
     });
 });
+
+describe("RangeKill.failed", () => {
+    it("fails when a pid could not be killed", () => {
+        expect(RangeKill.failed(RangeKill.planOfPort([APP], LISTENERS, 21000, defaultPools), new Map([[60, "access denied"]]))).toBe(true);
+    });
+
+    it("fails when a listener's pid is hidden, even if every visible pid was killed", () => {
+        const plan = RangeKill.planOfPort([APP], [...LISTENERS, { port: 21001, pid: null }], 21000, defaultPools);
+
+        expect(RangeKill.failed(plan, new Map())).toBe(true);
+    });
+
+    it("succeeds when every listener was killed", () => {
+        expect(RangeKill.failed(RangeKill.planOfPort([APP], LISTENERS, 21000, defaultPools), new Map())).toBe(false);
+    });
+});

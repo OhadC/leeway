@@ -74,6 +74,10 @@ export class RangeKill {
         return [`leeway: ${scope}`, ...lines, ""].join("\n");
     }
 
+    static failed({ targets }: KillPlan, failures: Map<number, string>): boolean {
+        return failures.size > 0 || targets.some(target => target.pid === null);
+    }
+
     private static planOfEntry(entry: RangeEntry, listeners: PortListener[]): KillPlan {
         return {
             scope: `${entry.folder}  ${entry.start}-${entry.end}`,

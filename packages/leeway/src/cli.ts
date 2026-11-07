@@ -123,7 +123,7 @@ function killRange(arg: string | undefined): void {
 
     process.stdout.write(RangeKill.render(plan, failures));
 
-    if (failures.size > 0 || plan.targets.some(target => target.pid === null)) {
+    if (RangeKill.failed(plan, failures)) {
         process.exit(1);
     }
 }
