@@ -269,13 +269,14 @@ orphans (in a pool, outside every range)
 
 `folder` is lowercased on Windows.
 
-### `leeway kill [<port>]`
+### `leeway kill [<port> | --orphans]`
 
 Kills every process tree listening in this folder's range, or with a port, in the range that contains it (any repo's). A listener started
 under `leeway` is killed with the nearest `leeway` run above it and that run's whole tree, so a watcher between them (`tsx watch`,
 `nodemon`) can't restart it; that takes down whatever else the run started too, like a `tsc --watch` beside the server under the same
 `concurrently`. A port in a pool outside every range is an orphan: `leeway kill <port>` kills just the listeners on that port, never
-their run. Ports outside every range and every pool are refused.
+their run. Ports outside every range and every pool are refused. `leeway kill --orphans` kills every orphan in every pool the same way,
+exactly the ones `leeway list` shows, and leaves living ranges alone.
 
 ### `leeway release [<folder>]`
 
