@@ -93,8 +93,8 @@ const { PORT_API } = devPorts(config);
 server.listen(PORT_API);
 ```
 
-`devPorts(config)` returns one port per catalogue entry: the entry's environment variable if it is set to a port, else the default
-port. It is browser-safe: in the browser it reads the ports injected as `LEEWAY_ENV`, by the vite plugin or by `{{LEEWAY_ENV}}`
+`devPorts(config)` returns one port per catalogue entry: the entry's environment variable if it is set, else the default port. A set
+value that isn't an integer 1-65535 throws, naming the port name and the value. It is browser-safe: in the browser it reads the ports injected as `LEEWAY_ENV`, by the vite plugin or by `{{LEEWAY_ENV}}`
 (see [Other bundlers](#other-bundlers)), and falls back to default ports when there are none.
 
 ### Agent guard

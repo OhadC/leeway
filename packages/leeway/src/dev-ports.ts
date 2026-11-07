@@ -21,14 +21,22 @@ export function devPorts<T extends LeewayConfig>(config: T, env: LeewayEnv = cur
     }
 
     return Object.fromEntries(
-        Object.entries(catalogue).map(([name, { port }]) => [name, environmentPort(env[name]) ?? port]),
+        Object.entries(catalogue).map(([name, { port }]) => [name, environmentPort(name, env[name]) ?? port]),
     ) as PortsOf<T>;
 }
 
-function environmentPort(value: string | number | undefined): number | undefined {
+function environmentPort(name: string, value: string | number | undefined): number | undefined {
+    if (value === undefined || value === "") {
+        return undefined;
+    }
+
     const port = Number(value);
 
-    return value !== "" && Number.isInteger(port) && port > 0 && port <= 65535 ? port : undefined;
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new Error(`leeway: ${name} is "${value}", not a port 1-65535`);
+    }
+
+    return port;
 }
 
 function isAgentShell(env: LeewayEnv): boolean {
