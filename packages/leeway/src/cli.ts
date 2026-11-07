@@ -16,7 +16,7 @@ import { RunWithPorts } from "./run-with-ports.ts";
 const USAGE = [
     "usage: leeway [--default | --inherit] [--] <command>   run <command> with this folder's range as env vars; {{NAME}} in <command> becomes its port, {{LEEWAY_ENV}} every port as JSON",
     "                                                       --default: the default ports; --inherit: the ports in the environment, else the default ports",
-    "       leeway env --export                             claim this folder's range and print it as export lines",
+    "       leeway env [--export]                           claim this folder's range and print it as dotenv lines, or export lines",
     "       leeway list [--json]                            show every range, the pids listening in it, and orphan listeners in the pools",
     "       leeway kill [<port>]                            kill what listens in this folder's range, or in the range holding <port>, or on an orphan <port>",
     "       leeway release [<folder>]                       release this folder's range, or <folder>'s, so its ports go back to the pools",
@@ -39,8 +39,8 @@ async function runLeeway(): Promise<void> {
         process.stdout.write(`${version}\n`);
     } else if (request) {
         await execWithPorts(ConfigFile.find(process.cwd()), request);
-    } else if (subcommand === "env" && rest.length === 1 && rest[0] === "--export") {
-        await printExportLines(ConfigFile.find(process.cwd()));
+    } else if (subcommand === "env" && (rest.length === 0 || (rest.length === 1 && rest[0] === "--export"))) {
+        await printEnvLines(ConfigFile.find(process.cwd()), rest[0] === "--export");
     } else if (subcommand === "list" && (rest.length === 0 || (rest.length === 1 && rest[0] === "--json"))) {
         const pools = RangeRegistry.pools();
         const listing = RangeListing.collect(RangeRegistry.livingEntries(), ListenerScan.listeners(), pools);
@@ -102,12 +102,13 @@ async function portsOfMode(found: FoundConfig, mode: ExecMode): Promise<Record<s
     return claim.entry.ports;
 }
 
-async function printExportLines(found: FoundConfig): Promise<void> {
+async function printEnvLines(found: FoundConfig, asExports: boolean): Promise<void> {
     const ports = await portsOfMode(found, "claim");
+    const linePrefix = asExports ? "export " : "";
 
     process.stdout.write(
         Object.entries(ports)
-            .map(([name, port]) => `export ${name}=${port}\n`)
+            .map(([name, port]) => `${linePrefix}${name}=${port}\n`)
             .join(""),
     );
 }

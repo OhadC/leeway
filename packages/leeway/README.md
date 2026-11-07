@@ -190,19 +190,49 @@ folder still claims its own range, and an explicit `--default` or `--inherit` ke
 
 `leeway --help` (or `-h`) prints the usage, `leeway --version` the version.
 
-### `leeway env --export`
+### `leeway env [--export]`
 
-Claims this folder's range and prints it as shell export lines:
+Claims this folder's range and prints it as dotenv lines, or with `--export` as shell export lines:
 
 ```sh
+$ leeway env
+PORT_WEB=21000
+PORT_API=21001
 $ leeway env --export
 export PORT_WEB=21000
 export PORT_API=21001
 ```
 
-stdout carries only `export NAME=port` lines; the port table and warnings go to stderr. If the range moved since the last claim, stderr
-says so: restart anything still on the old ports. Use it as `eval "$(leeway env --export)"` to give a shell its range, after which
-`devPorts` and tools started without `leeway` pick the ports up.
+stdout carries only those lines; the port table and warnings go to stderr. If the range moved since the last claim, stderr says so:
+restart anything still on the old ports. Under a `leeway` run for the same folder, either form prints the ports that run was given.
+
+Feed `leeway env` to anything that reads a dotenv file: `node --env-file`, `docker compose --env-file`, or a VS Code launch
+configuration whose `preLaunchTask` writes the file:
+
+```jsonc
+// .vscode/tasks.json
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "leeway env",
+            "type": "shell",
+            "command": "npx leeway env > .leeway.env",
+            "windows": { "options": { "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] } } }
+        }
+    ]
+}
+
+// .vscode/launch.json, in a configuration
+"preLaunchTask": "leeway env",
+"envFile": "${workspaceFolder}/.leeway.env"
+```
+
+The task runs under `cmd.exe` on Windows because Windows PowerShell's `>` writes UTF-16, or UTF-8 with a byte order mark, and
+dotenv readers expect plain text.
+
+Use `eval "$(leeway env --export)"` to give a shell its range, after which `devPorts` and tools started without `leeway`
+pick the ports up.
 
 ### `leeway list [--json]`
 

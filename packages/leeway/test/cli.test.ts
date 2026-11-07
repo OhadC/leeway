@@ -79,6 +79,28 @@ describe("leeway env --export", () => {
     });
 });
 
+describe("leeway env", () => {
+    it("prints only dotenv lines of the claimed ports, in catalogue order, the same ports --export prints", () => {
+        const { dir, home } = temporaryFolder();
+
+        const plain = LeewayCli.run(["env"], dir, home);
+        const exported = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
+
+        expect(plain.status).toBe(0);
+        expect(plain.stdout).toBe(`PORT_WEB=${exported.PORT_WEB}\nPORT_API=${exported.PORT_API}\n`);
+        expect(plain.stderr).toContain(`leeway: ports ${exported.PORT_WEB}-${exported.PORT_API}`);
+    });
+
+    it("prints the inherited ports under a leeway run for the same folder, without claiming", () => {
+        const { dir, home } = temporaryFolder();
+
+        const result = LeewayCli.run(["env"], dir, home, { LEEWAY_FOLDER: dir, PORT_WEB: "24000", PORT_API: "24001" });
+
+        expect(result.stdout).toBe("PORT_WEB=24000\nPORT_API=24001\n");
+        expect(fs.existsSync(path.join(home, ".leeway"))).toBe(false);
+    });
+});
+
 describe("leeway <command>", () => {
     it("exits with the command's exit code", () => {
         const { dir, home } = temporaryFolder();
@@ -280,7 +302,8 @@ describe("leeway errors", () => {
             [],
             ["--default"],
             ["--default", "--inherit", "vite"],
-            ["env"],
+            ["env", "--json"],
+            ["env", "--export", "now"],
             ["list", "all"],
             ["kill", "web"],
             ["pools", "clear"],
