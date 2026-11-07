@@ -44,9 +44,13 @@ async function runLeeway(): Promise<void> {
         await printEnvLines(ConfigFile.find(process.cwd()), rest[0] === "--export");
     } else if (subcommand === "list" && (rest.length === 0 || (rest.length === 1 && rest[0] === "--json"))) {
         const pools = RangeRegistry.pools();
-        const listing = RangeListing.collect(RangeRegistry.livingEntries(), ListenerScan.listeners(), pools);
+        const listing = RangeListing.collect(RangeRegistry.livingEntries(), ListenerScan.listeners(), pools, ProcessTree.rows());
 
-        process.stdout.write(rest.length === 0 ? RangeListing.render(listing, pools) : `${JSON.stringify(listing, undefined, 4)}\n`);
+        process.stdout.write(
+            rest.length === 0
+                ? RangeListing.render(listing, pools, ConfigFile.folderOf(process.cwd()), process.platform)
+                : `${JSON.stringify(listing, undefined, 4)}\n`,
+        );
     } else if (subcommand === "kill" && rest.length <= 1 && rest.every(arg => /^\d+$/.test(arg) || arg === "--orphans")) {
         killRange(rest[0]);
     } else if (subcommand === "release" && rest.length <= 1 && rest.every(arg => !arg.startsWith("-"))) {

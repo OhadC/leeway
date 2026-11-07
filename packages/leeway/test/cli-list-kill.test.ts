@@ -28,16 +28,37 @@ afterEach(async () => {
 });
 
 describe("leeway list and kill", () => {
-    it("lists a server listening in the folder's range with its pid", async () => {
+    it("lists a server listening in the folder's range with its pid and command, marking this folder", async () => {
         const { dir, home, ports } = claimedFolder();
         const server = await startServer(ports.PORT_WEB);
 
         const result = LeewayCli.run(["list"], dir, home);
 
         expect(result.status).toBe(0);
-        expect(result.stdout).toContain(`${shown(dir)}  ${ports.PORT_WEB}-${ports.PORT_API}`);
-        expect(result.stdout).toContain(`PORT_WEB  ${ports.PORT_WEB}  pid ${server.pid}`);
+        expect(result.stdout).toContain(`${shown(dir)}  ${ports.PORT_WEB}-${ports.PORT_API}  (this folder)\n`);
+        expect(result.stdout).toContain(`PORT_WEB  ${ports.PORT_WEB}  pid ${server.pid}  node`);
         expect(result.stdout).toContain(`PORT_API  ${ports.PORT_API}  -`);
+    }, 60_000);
+
+    it("lists with nothing marked outside every configured folder", () => {
+        const { dir, home, ports } = claimedFolder();
+
+        const result = LeewayCli.run(["list"], home, home);
+
+        expect(result.status).toBe(0);
+        expect(result.stdout).toBe(
+            `${shown(dir)}  ${ports.PORT_WEB}-${ports.PORT_API}\n  PORT_WEB  ${ports.PORT_WEB}  -\n  PORT_API  ${ports.PORT_API}  -\n`,
+        );
+    }, 60_000);
+
+    it("maps each listening pid to its full command line in --json", async () => {
+        const { dir, home, ports } = claimedFolder();
+        const server = await startServer(ports.PORT_WEB);
+
+        const result = LeewayCli.run(["list", "--json"], dir, home);
+
+        expect(result.status).toBe(0);
+        expect(JSON.parse(result.stdout).commands[String(server.pid)]).toMatch(new RegExp(`node.*createServer.* ${ports.PORT_WEB}$`, "i"));
     }, 60_000);
 
     it("lists every range as JSON with --json", async () => {
@@ -109,7 +130,9 @@ describe("leeway list and kill", () => {
         const listed = LeewayCli.run(["list"], dir, home);
         const killed = LeewayCli.run(["kill", String(orphanPort)], dir, home);
 
-        expect(listed.stdout).toBe(`orphans (in a pool, outside every range)\n  ${orphanPort}  pid ${server.pid}\n`);
+        expect(listed.stdout).toMatch(
+            new RegExp(`^orphans \\(in a pool, outside every range\\)\\n  ${orphanPort}  pid ${server.pid}  node.*\\n$`),
+        );
         expect(killed.stdout).toBe(`leeway: orphan port ${orphanPort}\n  pid ${server.pid}  ${orphanPort}  killed\n`);
         expect(await accepts(orphanPort)).toBe(false);
     }, 60_000);
