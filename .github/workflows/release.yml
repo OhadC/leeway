@@ -5,7 +5,7 @@ on:
         tags: ["v*"]
 
 permissions:
-    contents: read
+    contents: write
     id-token: write
 
 jobs:
@@ -13,6 +13,13 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
+            - name: Tag matches package version
+              run: |
+                  version=$(node -p "require('./packages/leeway/package.json').version")
+                  if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+                      echo "::error::tag $GITHUB_REF_NAME does not match packages/leeway version $version"
+                      exit 1
+                  fi
             - uses: pnpm/action-setup@v6
             - uses: actions/setup-node@v7
               with:
@@ -24,3 +31,6 @@ jobs:
             - run: pnpm verify
             - run: npm publish
               working-directory: packages/leeway
+            - run: gh release create "$GITHUB_REF_NAME" --generate-notes
+              env:
+                  GH_TOKEN: ${{ github.token }}

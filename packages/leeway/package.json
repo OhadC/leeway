@@ -2,6 +2,15 @@
     "name": "leeway",
     "version": "0.3.0",
     "description": "Per-folder dev port ranges so parallel worktrees and agents never fight over ports",
+    "keywords": [
+        "port",
+        "ports",
+        "dev-server",
+        "worktree",
+        "monorepo",
+        "vite",
+        "agents"
+    ],
     "license": "MIT",
     "repository": {
         "type": "git",
