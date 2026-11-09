@@ -22,13 +22,13 @@ describe("RangeKill.planOfFolder", () => {
         const plan = RangeKill.planOfFolder([TOOL, APP], LISTENERS, "C:\\Dev\\App", "win32");
 
         expect(plan).toEqual({
+            kind: "range",
             scope: "c:\\dev\\app  21000-21002",
             names: APP.ports,
             targets: [
                 { pid: 70, ports: [21000, 21002] },
                 { pid: 60, ports: [21001] },
             ],
-            withRuns: true,
         });
     });
 
@@ -42,10 +42,10 @@ describe("RangeKill.planOfFolder", () => {
 describe("RangeKill.planOfPort", () => {
     it("targets the whole range containing the port, with the leeway runs above its listeners", () => {
         expect(RangeKill.planOfPort([APP, TOOL], LISTENERS, 21003, defaultPools)).toEqual({
+            kind: "range",
             scope: "c:\\dev\\tool  21003-21003",
             names: TOOL.ports,
             targets: [{ pid: 80, ports: [21003] }],
-            withRuns: true,
         });
     });
 
@@ -53,13 +53,12 @@ describe("RangeKill.planOfPort", () => {
         const listeners = [...LISTENERS, { port: 25000, pid: 90 }, { port: 25000, pid: 91 }, { port: 25001, pid: 92 }];
 
         expect(RangeKill.planOfPort([APP, TOOL], listeners, 25000, defaultPools)).toEqual({
+            kind: "orphan",
             scope: "orphan port 25000",
-            names: {},
             targets: [
                 { pid: 90, ports: [25000] },
                 { pid: 91, ports: [25000] },
             ],
-            withRuns: false,
         });
     });
 
@@ -70,10 +69,9 @@ describe("RangeKill.planOfPort", () => {
         ];
 
         expect(RangeKill.planOfPort([APP, TOOL], LISTENERS, 3000, () => pools)).toEqual({
+            kind: "orphan",
             scope: "orphan port 3000",
-            names: {},
             targets: [{ pid: 5, ports: [3000] }],
-            withRuns: false,
         });
     });
 
@@ -81,10 +79,10 @@ describe("RangeKill.planOfPort", () => {
         const outside: RangeEntry = { folder: "c:\\dev\\outside", start: 3000, end: 3001, ports: { web: 3000, api: 3001 } };
 
         expect(RangeKill.planOfPort([APP, outside], LISTENERS, 3001, defaultPools)).toEqual({
+            kind: "range",
             scope: "c:\\dev\\outside  3000-3001",
             names: outside.ports,
             targets: [{ pid: 5, ports: [3000] }],
-            withRuns: true,
         });
     });
 
@@ -109,13 +107,12 @@ describe("RangeKill.planOfOrphans", () => {
         const listeners = [...LISTENERS, { port: 25000, pid: 90 }, { port: 25001, pid: 90 }, { port: 4000, pid: 95 }];
 
         expect(RangeKill.planOfOrphans([APP, TOOL], listeners, pools)).toEqual({
+            kind: "orphan",
             scope: "3000-3999, 21000-29999 outside every range",
-            names: {},
             targets: [
                 { pid: 5, ports: [3000] },
                 { pid: 90, ports: [25000, 25001] },
             ],
-            withRuns: false,
         });
     });
 

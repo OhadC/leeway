@@ -122,7 +122,7 @@ function killRange(arg: string | undefined): void {
     const entries = RangeRegistry.livingEntries();
     const listeners = ListenerScan.listeners().filter(listener => listener.pid !== process.pid);
     const plan = killPlan(entries, listeners, arg);
-    const failures = ProcessTree.killTrees(RangeKill.visiblePids(plan), plan.withRuns);
+    const failures = ProcessTree.killTrees(RangeKill.visiblePids(plan), plan.kind === "range");
 
     process.stdout.write(RangeKill.render(plan, failures));
 
