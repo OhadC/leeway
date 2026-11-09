@@ -86,6 +86,13 @@ describe("ListenerScan.listeners", () => {
         ]);
     });
 
+    it("gives a null pid to an lsof address listed before any process", () => {
+        expect(ListenerScan.listeners("darwin", printed("n*:21000\np42\nn*:21001\n"))).toEqual([
+            { port: 21000, pid: null },
+            { port: 21001, pid: 42 },
+        ]);
+    });
+
     it("reads no listeners when lsof finds nothing and exits 1", () => {
         expect(ListenerScan.listeners("darwin", () => ({ status: 1, stdout: "", stderr: "" }))).toEqual([]);
     });

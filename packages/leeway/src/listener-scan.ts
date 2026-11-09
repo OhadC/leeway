@@ -49,7 +49,7 @@ export class ListenerScan {
     }
 
     private static macListeners(fields: string): PortListener[] {
-        let pid = 0;
+        let pid: number | null = null;
 
         return fields.split("\n").flatMap(line => {
             if (line.startsWith("p")) {
