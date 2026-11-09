@@ -87,6 +87,10 @@ export class RangeKill {
         return targets.flatMap(target => (target.pid === null ? [] : [target.pid]));
     }
 
+    static killsRuns(plan: KillPlan): boolean {
+        return plan.kind === "range";
+    }
+
     static failed({ targets }: KillPlan, failures: Map<number, string>): boolean {
         return failures.size > 0 || targets.some(target => target.pid === null);
     }

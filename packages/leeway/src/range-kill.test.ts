@@ -134,6 +134,17 @@ describe("RangeKill.visiblePids", () => {
     });
 });
 
+describe("RangeKill.killsRuns", () => {
+    it("kills the leeway runs above a range's listeners", () => {
+        expect(RangeKill.killsRuns(RangeKill.planOfPort([APP], LISTENERS, 21000, defaultPools))).toBe(true);
+    });
+
+    it("leaves runs alone when killing orphans, since no run owns their ports", () => {
+        expect(RangeKill.killsRuns(RangeKill.planOfPort([APP], LISTENERS, 25000, defaultPools))).toBe(false);
+        expect(RangeKill.killsRuns(RangeKill.planOfOrphans([APP], LISTENERS, Pools.DEFAULT))).toBe(false);
+    });
+});
+
 describe("RangeKill.render", () => {
     it("reports each pid with its named ports as killed or with its failure", () => {
         const plan = RangeKill.planOfPort([APP], LISTENERS, 21000, defaultPools);
