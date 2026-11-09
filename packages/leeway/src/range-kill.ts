@@ -3,11 +3,19 @@ import { type Pool, Pools } from "./pools.ts";
 import { RangeListing } from "./range-listing.ts";
 import { RangeRegistry, type RangeEntry } from "./range-registry.ts";
 
-export type KillPlan = {
+export type KillPlan = RangePlan | OrphanPlan;
+
+type RangePlan = {
+    kind: "range";
     scope: string;
     names: Record<string, number>;
     targets: KillTarget[];
-    withRuns: boolean;
+};
+
+type OrphanPlan = {
+    kind: "orphan";
+    scope: string;
+    targets: KillTarget[];
 };
 
 type KillTarget = {
@@ -42,27 +50,28 @@ export class RangeKill {
         }
 
         return {
+            kind: "orphan",
             scope: `orphan port ${port}`,
-            names: {},
             targets: targetsOf(listeners.filter(listener => listener.port === port)),
-            withRuns: false,
         };
     }
 
     static planOfOrphans(entries: RangeEntry[], listeners: PortListener[], pools: Pool[]): KillPlan {
         return {
+            kind: "orphan",
             scope: `${Pools.text(pools)} outside every range`,
-            names: {},
             targets: targetsOf(RangeListing.orphans(entries, listeners, pools)),
-            withRuns: false,
         };
     }
 
-    static render({ scope, names, targets }: KillPlan, failures: Map<number, string>): string {
+    static render(plan: KillPlan, failures: Map<number, string>): string {
+        const { scope, targets } = plan;
+
         if (targets.length === 0) {
             return `leeway: nothing is listening in ${scope}\n`;
         }
 
+        const names = plan.kind === "range" ? plan.names : {};
         const nameOfPort = new Map(Object.entries(names).map(([name, port]) => [port, name]));
         const lines = targets.map(target => {
             const ports = target.ports.map(port => [nameOfPort.get(port), port].filter(Boolean).join(" ")).join(", ");
@@ -78,16 +87,20 @@ export class RangeKill {
         return targets.flatMap(target => (target.pid === null ? [] : [target.pid]));
     }
 
+    static killsRuns(plan: KillPlan): boolean {
+        return plan.kind === "range";
+    }
+
     static failed({ targets }: KillPlan, failures: Map<number, string>): boolean {
         return failures.size > 0 || targets.some(target => target.pid === null);
     }
 
-    private static planOfEntry(entry: RangeEntry, listeners: PortListener[]): KillPlan {
+    private static planOfEntry(entry: RangeEntry, listeners: PortListener[]): RangePlan {
         return {
+            kind: "range",
             scope: `${entry.folder}  ${entry.start}-${entry.end}`,
             names: entry.ports,
             targets: targetsOf(listeners.filter(listener => listener.port >= entry.start && listener.port <= entry.end)),
-            withRuns: true,
         };
     }
 }

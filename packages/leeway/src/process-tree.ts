@@ -28,8 +28,8 @@ export class ProcessTree {
         }
     }
 
-    static killTree(pid: number, platform: NodeJS.Platform = process.platform): void {
-        if (platform === "win32") {
+    static killTree(pid: number): void {
+        if (process.platform === "win32") {
             ProcessTree.killWindowsTree(pid);
         } else {
             ProcessTree.killPosixTree(pid);
