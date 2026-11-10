@@ -15,27 +15,45 @@
             "type": "object",
             "minProperties": 1,
             "propertyNames": {
-                "description": "A port name: letters, digits and _, not starting with a digit.",
-                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                "$ref": "#/definitions/portName"
             },
             "additionalProperties": {
-                "description": "A catalogue entry. Any properties besides port are yours; leeway ignores them.",
-                "type": "object",
-                "required": ["port"],
-                "properties": {
-                    "port": {
-                        "description": "The default port: the port this entry uses when no range applies.",
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 65535
-                    }
-                }
+                "$ref": "#/definitions/entry"
+            }
+        },
+        "pinned": {
+            "description": "Pinned ports: ports every folder uses at once, like a local Postgres, keyed by port name. Each keeps its port in every folder and mode and is never part of a range; a name can not also be in ports.",
+            "type": "object",
+            "propertyNames": {
+                "$ref": "#/definitions/portName"
+            },
+            "additionalProperties": {
+                "$ref": "#/definitions/entry"
             }
         },
         "agentGuard": {
             "description": "Refuse default ports to agent shells that have no ports of their own.",
             "type": "boolean",
             "default": false
+        }
+    },
+    "definitions": {
+        "portName": {
+            "description": "A port name: letters, digits and _, not starting with a digit.",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "entry": {
+            "description": "A port entry. Any properties besides port are yours; leeway ignores them.",
+            "type": "object",
+            "required": ["port"],
+            "properties": {
+                "port": {
+                    "description": "The default port: the port this entry uses when no range applies.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535
+                }
+            }
         }
     }
 }

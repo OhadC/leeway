@@ -1,23 +1,28 @@
 /** Every port the dev setup uses, keyed by port name. Each port name is also the environment variable its port travels in; `port` is the default port. */
 export type LeewayCatalogue = Record<string, { port: number }>;
 
+/** Ports every folder uses at once, keyed by port name, in the catalogue's entry shape. Not part of the catalogue: each keeps its `port` in every folder and mode. */
+export type LeewayPinnedPorts = Record<string, { port: number }>;
+
 export type LeewayConfig = {
     ports: LeewayCatalogue;
+    /** Ports every folder uses at once, like a local Postgres. Never part of a range, so leeway never claims, tests or kills them; a claim refuses one inside the machine's pools. A name can't be in both `ports` and `pinned`. */
+    pinned?: LeewayPinnedPorts;
     /** Makes `devPorts` throw in an agent shell (`CLAUDECODE`, `GEMINI_CLI`, `CURSOR_AGENT` or `AI_AGENT` set) when none of the catalogue's port names is set in the environment. Skipped under `VITEST`. */
     agentGuard?: boolean;
 };
 
 export type LeewayEnv = Record<string, string | number | undefined>;
 
-/** One port per port name of `T`'s catalogue. */
-export type PortsOf<T extends LeewayConfig> = Record<keyof T["ports"] & string, number>;
+/** One port per port name of `T`'s catalogue and pinned ports. */
+export type PortsOf<T extends LeewayConfig> = Record<(keyof T["ports"] | keyof NonNullable<T["pinned"]>) & string, number>;
 
 declare const LEEWAY_ENV: Record<string, number> | undefined;
 
 const AGENT_MARKERS = ["CLAUDECODE", "GEMINI_CLI", "CURSOR_AGENT", "AI_AGENT"];
 
 /**
- * Returns one port per catalogue entry: the environment variable named after its port name when set, else its default port.
+ * Returns one port per catalogue entry, then per pinned port: the environment variable named after its port name when set, else its `port`.
  * Browser-safe: in the browser it reads the ports injected as `LEEWAY_ENV` by `leeway/vite` or the `{{LEEWAY_ENV}}` placeholder.
  * @param env Defaults to `LEEWAY_ENV` merged with `process.env`.
  * @throws When a set value isn't an integer 1-65535, or when `agentGuard` refuses.
@@ -30,7 +35,7 @@ export function devPorts<T extends LeewayConfig>(config: T, env: LeewayEnv = cur
     }
 
     return Object.fromEntries(
-        Object.entries(catalogue).map(([name, { port }]) => [name, environmentPort(name, env[name]) ?? port]),
+        Object.entries({ ...catalogue, ...config.pinned }).map(([name, { port }]) => [name, environmentPort(name, env[name]) ?? port]),
     ) as PortsOf<T>;
 }
 

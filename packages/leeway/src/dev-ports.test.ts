@@ -42,6 +42,13 @@ describe("devPorts", () => {
     it("throws on an injected number that is not a port", () => {
         expect(() => devPorts(config, { PORT_API: 70000 })).toThrowError('leeway: PORT_API is "70000", not a port 1-65535');
     });
+
+    it("returns the pinned ports after the catalogue's, each from its environment variable when it is set", () => {
+        const withPinned = { ...config, pinned: { PORT_DB: { port: 5432, app: "Postgres" }, PORT_CACHE: { port: 6379 } } };
+
+        expect(devPorts(withPinned, {})).toEqual({ PORT_WEB: 5173, PORT_API: 4100, PORT_DB: 5432, PORT_CACHE: 6379 });
+        expect(devPorts(withPinned, { PORT_DB: "6543" }).PORT_DB).toBe(6543);
+    });
 });
 
 describe("devPorts agent guard", () => {
@@ -61,6 +68,12 @@ describe("devPorts agent guard", () => {
 
     it("lets an agent shell through once any catalogue variable is in its environment", () => {
         expect(devPorts(guarded, { CLAUDECODE: "1", PORT_API: "21001" })).toEqual({ PORT_WEB: 5173, PORT_API: 21001 });
+    });
+
+    it("still refuses an agent shell whose only leeway variable is a pinned port, since pinned ports are the same in every folder", () => {
+        const guardedWithPinned = { ...guarded, pinned: { PORT_DB: { port: 5432 } } };
+
+        expect(() => devPorts(guardedWithPinned, { CLAUDECODE: "1", PORT_DB: "5432" })).toThrowError(agentShellError);
     });
 
     it("lets a vitest run in an agent shell through, since vitest imports modules that read ports", () => {

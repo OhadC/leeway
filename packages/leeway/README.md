@@ -47,9 +47,29 @@ ignores them.
 | setting      | default | meaning                                                                |
 | ------------ | ------- | ---------------------------------------------------------------------- |
 | `ports`      | -       | the catalogue; required                                                |
+| `pinned`     | -       | ports every folder shares (see [Pinned ports](#pinned-ports))          |
 | `agentGuard` | `false` | refuse default ports to agent shells (see [Agent guard](#agent-guard)) |
 
 Unknown settings are refused, so a typo fails loudly.
+
+### Pinned ports
+
+Some ports should not move per folder: a local Postgres, or another repo's dev server, that every worktree uses at once. List them under
+`pinned`, in the same shape as `ports`:
+
+```json
+{
+    "ports": { "PORT_WEB": { "port": 5173 } },
+    "pinned": { "PORT_DB": { "port": 5432, "description": "local postgres" } }
+}
+```
+
+A pinned port keeps its `port` in every folder and every mode, so the config stays the one file of ports and `devPorts` the one call
+that reads them. leeway hands it down like any port, in the environment, `{{PORT_DB}}` and `{{LEEWAY_ENV}}`, and marks it `pinned` in its
+table. It is never part of a range: claims don't count, record or test it, the agent guard ignores it, and `leeway list` and `leeway kill`
+never reach it. A claim refuses a pinned port inside one of the machine's pools, where `leeway kill --orphans` would kill it. A name can't
+be in both `ports` and `pinned`. For a worktree that needs its own copy, move the entry to `ports` there without committing it; its next
+claim grows the range by one.
 
 leeway finds the config by walking up from the current directory; the nearest `leeway.json` wins, and the folder holding it is the
 folder that owns the range. Commit it: every worktree gets its own copy and therefore its own range.
@@ -94,7 +114,7 @@ const { PORT_API } = devPorts(config);
 server.listen(PORT_API);
 ```
 
-`devPorts(config)` returns one port per catalogue entry: the entry's environment variable if it is set, else the default port. A set
+`devPorts(config)` returns one port per catalogue entry, then per pinned port: the environment variable if it is set, else the entry's `port`. A set
 value that isn't an integer 1-65535 throws, naming the port name and the value. It is browser-safe: in the browser it reads the ports injected as `LEEWAY_ENV`, by the vite plugin or by `{{LEEWAY_ENV}}`
 (see [Other bundlers](#other-bundlers)), and falls back to default ports when there are none.
 
@@ -410,6 +430,11 @@ services:
         image: postgres
         ports: ["${PORT_DB}:5432"]
 ```
+
+### A Postgres every folder shares
+
+Move `PORT_DB` from `ports` to `pinned` in the [docker compose](#docker-compose) recipe: `leeway docker compose up -d` in any worktree
+starts the one Postgres on 5432, and `devPorts(config).PORT_DB` is 5432 in every worktree.
 
 ### direnv
 

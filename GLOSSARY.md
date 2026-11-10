@@ -8,20 +8,25 @@ agents never fight over them.
 ### Ports
 
 **Config**:
-A repo's `leeway.json`: its catalogue plus the settings that apply to it.
+A repo's `leeway.json`: its catalogue and pinned ports, plus the settings that apply to it.
 _Avoid_: settings file, manifest
 
 **Catalogue**:
-The list of ports a repo's dev setup uses, each with a port name and a default port; the `ports` of the config.
+The list of ports a repo's dev setup runs once per folder, each with a port name and a default port; the `ports` of the config.
 _Avoid_: port map, port list
 
 **Port name**:
-A catalogue entry's name; it is also the environment variable the port travels in.
+A catalogue entry's or pinned port's name; it is also the environment variable the port travels in.
 _Avoid_: key, slot, service
 
 **Default port**:
 The port a catalogue entry uses when no range applies; each repo's own business and free to collide across repos.
 _Avoid_: base port, usual port, fixed port
+
+**Pinned port**:
+A port the config names beside its catalogue, not in it: one port for every folder, for something they all use at once, like a local
+Postgres. It takes no part in ranges, and is not leeway's to claim, test or kill.
+_Avoid_: unranged port, sticky port
 
 ### Ownership
 

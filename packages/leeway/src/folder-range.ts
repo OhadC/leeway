@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import type { FoundConfig } from "./config-file.ts";
-import { devPorts, type LeewayEnv } from "./dev-ports.ts";
+import { devPorts, type LeewayConfig, type LeewayEnv } from "./dev-ports.ts";
 import { type RangeClaim, type RangeEntry, RangeRegistry } from "./range-registry.ts";
 
 export class FolderRange {
@@ -19,6 +19,7 @@ export class FolderRange {
             registryPath: RangeRegistry.defaultPath(os.homedir()),
             folder,
             names: Object.keys(config.ports),
+            pinned: FolderRange.pinnedPorts(config),
             platform: process.platform,
             pathExists: fs.existsSync,
             testPort: RangeRegistry.testPort,
@@ -26,10 +27,17 @@ export class FolderRange {
         });
     }
 
-    static table(folder: string, ports: Record<string, number>, range?: RangeEntry): string {
+    static pinnedPorts({ pinned = {} }: LeewayConfig): Record<string, number> {
+        return Object.fromEntries(Object.entries(pinned).map(([name, { port }]) => [name, port]));
+    }
+
+    static table({ folder, config }: FoundConfig, ports: Record<string, number>, range?: RangeEntry): string {
         const heading = range ? `ports ${range.start}-${range.end}` : "default ports";
         const nameWidth = Math.max(...Object.keys(ports).map(name => name.length));
-        const rows = Object.entries(ports).map(([name, port]) => `  ${name.padEnd(nameWidth)}  ${port}\n`);
+        const isPinned = (name: string) => Object.hasOwn(config.pinned ?? {}, name);
+        const rows = Object.entries(ports).map(
+            ([name, port]) => `  ${name.padEnd(nameWidth)}  ${port}${isPinned(name) ? "  pinned" : ""}\n`,
+        );
 
         return `leeway: ${heading} for ${folder}\n${rows.join("")}`;
     }

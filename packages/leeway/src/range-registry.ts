@@ -23,6 +23,7 @@ export type ClaimRangeOptions = {
     registryPath: string;
     folder: string;
     names: readonly string[];
+    pinned?: Record<string, number>;
     platform: NodeJS.Platform;
     pathExists: (candidate: string) => boolean;
     testPort: (port: number) => Promise<PortBindState>;
@@ -130,6 +131,7 @@ export class RangeRegistry {
         registryPath,
         folder: folderPath,
         names,
+        pinned = {},
         platform,
         pathExists,
         testPort,
@@ -137,6 +139,9 @@ export class RangeRegistry {
         const folder = RangeRegistry.folderKey(folderPath, platform);
         const registry = RangeRegistry.read(registryPath);
         const pools = RangeRegistry.poolsOf(registry, registryPath);
+
+        RangeRegistry.refusePinnedInPools(pinned, pools);
+
         const entries = Object.entries(registry.folders);
         const isOwn = ([key]: [string, unknown]) => RangeRegistry.folderKey(key, platform) === folder;
         const own = entries.filter(isOwn);
@@ -159,6 +164,18 @@ export class RangeRegistry {
         });
 
         return { entry: { folder, ...range }, previous: current && { folder, ...current } };
+    }
+
+    private static refusePinnedInPools(pinned: Record<string, number>, pools: Pool[]): void {
+        for (const [name, port] of Object.entries(pinned)) {
+            const pool = pools.find(candidate => Pools.holds([candidate], port));
+
+            if (pool) {
+                throw new Error(
+                    `leeway: pinned ${name} ${port} is inside the pool ${Pools.text([pool])}; pin a port outside the machine's pools`,
+                );
+            }
+        }
     }
 
     private static releaseLocked(folder: string, platform: NodeJS.Platform, registryPath: string): RangeEntry {

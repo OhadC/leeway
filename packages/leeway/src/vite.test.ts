@@ -30,6 +30,15 @@ describe("leeway vite plugin in a dev server", () => {
         expect(listeningPortOf(server)).toBe(port);
     });
 
+    it("listens on a pinned port when the chosen port name is pinned", async () => {
+        const port = await freePoolPort();
+        const config = { ports: { PORT_WEB: { port: 5173 } }, pinned: { PORT_SHARED: { port } } };
+
+        const server = await startDevServer({ plugins: [leeway({ config, port: "PORT_SHARED" })] });
+
+        expect(listeningPortOf(server)).toBe(port);
+    });
+
     it("listens on the port the environment sets for the chosen port name", async () => {
         const port = await freePoolPort();
         vi.stubEnv("PORT_WEB", String(port));
