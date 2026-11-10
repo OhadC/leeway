@@ -69,11 +69,11 @@ async function runLeeway(): Promise<void> {
 }
 
 async function execWithPorts(found: FoundConfig, { mode, command }: ExecRequest): Promise<void> {
-    const names = Object.keys(found.config.ports);
+    const names = [...Object.keys(found.config.ports), ...Object.keys(found.config.pinned ?? {})];
     const unknown = ExecCommand.unknownPlaceholders(command, names);
 
     if (unknown.length > 0) {
-        failWith(`leeway: unknown ${unknown.map(name => `{{${name}}}`).join(", ")} in the command; the catalogue has ${names.join(", ")}`);
+        failWith(`leeway: unknown ${unknown.map(name => `{{${name}}}`).join(", ")} in the command; the config has ${names.join(", ")}`);
     }
 
     const ports = await portsOfMode(found, mode);
@@ -89,7 +89,7 @@ async function portsOfMode(found: FoundConfig, mode: ExecMode): Promise<Record<s
     if (mode === "default") {
         const ports = devPorts(found.config, {});
 
-        process.stderr.write(FolderRange.table(found.folder, ports));
+        process.stderr.write(FolderRange.table(found, ports));
 
         return ports;
     }
@@ -101,10 +101,11 @@ async function portsOfMode(found: FoundConfig, mode: ExecMode): Promise<Record<s
     }
 
     const claim = await FolderRange.claim(found);
+    const ports = { ...claim.entry.ports, ...FolderRange.pinnedPorts(found.config) };
 
-    process.stderr.write(FolderRange.table(found.folder, claim.entry.ports, claim.entry) + (FolderRange.movedWarning(claim) ?? ""));
+    process.stderr.write(FolderRange.table(found, ports, claim.entry) + (FolderRange.movedWarning(claim) ?? ""));
 
-    return claim.entry.ports;
+    return ports;
 }
 
 async function printEnvLines(found: FoundConfig, asExports: boolean): Promise<void> {

@@ -48,7 +48,9 @@ export class ConfigFile {
         const content = ConfigFile.readJson(file);
 
         if (!isObject(content)) {
-            throw new Error(`leeway: ${file} must be an object of { "ports": ${PORTS_SHAPE}, "agentGuard"?: <boolean> }`);
+            throw new Error(
+                `leeway: ${file} must be an object of { "ports": ${PORTS_SHAPE}, "pinned"?: ${PORTS_SHAPE}, "agentGuard"?: <boolean> }`,
+            );
         }
 
         if (!isObject(content.ports) || Object.keys(content.ports).length === 0) {
@@ -69,7 +71,24 @@ export class ConfigFile {
             throw new Error(`leeway: "$schema" in ${file} must be a string`);
         }
 
-        for (const [name, entry] of Object.entries(content.ports)) {
+        if (content.pinned !== undefined && !isObject(content.pinned)) {
+            throw new Error(`leeway: "pinned" in ${file} must be ${PORTS_SHAPE}`);
+        }
+
+        ConfigFile.checkEntries(content.ports, file);
+        ConfigFile.checkEntries(content.pinned ?? {}, file);
+
+        const inBoth = Object.keys(content.pinned ?? {}).find(name => Object.hasOwn(content.ports as object, name));
+
+        if (inBoth !== undefined) {
+            throw new Error(`leeway: ${inBoth} in ${file} is in both ports and pinned`);
+        }
+
+        return content as LeewayConfig;
+    }
+
+    private static checkEntries(entries: Record<string, unknown>, file: string): void {
+        for (const [name, entry] of Object.entries(entries)) {
             if (!ENV_NAME.test(name)) {
                 throw new Error(
                     `leeway: ${JSON.stringify(name)} in ${file} is not an environment variable name (letters, digits, _; not starting with a digit)`,
@@ -84,8 +103,6 @@ export class ConfigFile {
                 throw new Error(`leeway: ${name} in ${file} needs a "port" that is an integer 1-65535`);
             }
         }
-
-        return content as LeewayConfig;
     }
 
     private static readJson(file: string): unknown {

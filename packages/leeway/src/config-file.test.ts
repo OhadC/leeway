@@ -37,6 +37,13 @@ describe("ConfigFile.find", () => {
         expect(ConfigFile.find(folder).config.agentGuard).toBe(true);
     });
 
+    it("reads pinned ports, with props of the user's", () => {
+        const folder = tempFolder();
+        writeConfig(folder, { ports: { PORT_APP: { port: 3000 } }, pinned: { PORT_DB: { port: 5432, app: "Postgres" } } });
+
+        expect(ConfigFile.find(folder).config.pinned).toEqual({ PORT_DB: { port: 5432, app: "Postgres" } });
+    });
+
     it("accepts a $schema pointing at the shipped schema", () => {
         const folder = tempFolder();
         writeConfig(folder, { $schema: "./node_modules/leeway/schema.json", ports: { PORT_APP: { port: 3000 } } });
@@ -68,7 +75,7 @@ describe("ConfigFile.find", () => {
         writeConfig(folder, content);
 
         expect(() => ConfigFile.find(folder)).toThrowError(
-            `leeway: ${path.join(folder, "leeway.json")} must be an object of { "ports": { "NAME": { "port": <integer 1-65535> } }, "agentGuard"?: <boolean> }`,
+            `leeway: ${path.join(folder, "leeway.json")} must be an object of { "ports": { "NAME": { "port": <integer 1-65535> } }, "pinned"?: { "NAME": { "port": <integer 1-65535> } }, "agentGuard"?: <boolean> }`,
         );
     });
 
@@ -91,7 +98,7 @@ describe("ConfigFile.find", () => {
         writeConfig(folder, { ports: { PORT_APP: { port: 3000 } }, agentGaurd: true });
 
         expect(() => ConfigFile.find(folder)).toThrowError(
-            `leeway: "agentGaurd" in ${path.join(folder, "leeway.json")} is not a setting (ports, agentGuard)`,
+            `leeway: "agentGaurd" in ${path.join(folder, "leeway.json")} is not a setting (ports, pinned, agentGuard)`,
         );
     });
 
@@ -136,6 +143,35 @@ describe("ConfigFile.find", () => {
         expect(() => ConfigFile.find(folder)).toThrowError(
             `leeway: LEEWAY_ENV in ${path.join(folder, "leeway.json")} is reserved for the {{LEEWAY_ENV}} placeholder`,
         );
+    });
+
+    it.each([
+        ["an array", [{ port: 5432 }]],
+        ["null", null],
+        ["a bare port", 5432],
+    ])("refuses pinned ports that are %s", (_, pinned) => {
+        const folder = tempFolder();
+        writeConfig(folder, { ports: { PORT_APP: { port: 3000 } }, pinned });
+
+        expect(() => ConfigFile.find(folder)).toThrowError(
+            `leeway: "pinned" in ${path.join(folder, "leeway.json")} must be { "NAME": { "port": <integer 1-65535> } }`,
+        );
+    });
+
+    it.each([
+        ["an entry without a port", { PORT_DB: { app: "Postgres" } }, 'PORT_DB in FILE needs a "port" that is an integer 1-65535'],
+        [
+            "a name that is not an environment variable name",
+            { "db-port": { port: 5432 } },
+            '"db-port" in FILE is not an environment variable name (letters, digits, _; not starting with a digit)',
+        ],
+        ["LEEWAY_ENV", { LEEWAY_ENV: { port: 5432 } }, "LEEWAY_ENV in FILE is reserved for the {{LEEWAY_ENV}} placeholder"],
+        ["a port name the catalogue has too", { PORT_APP: { port: 5432 } }, "PORT_APP in FILE is in both ports and pinned"],
+    ])("refuses pinned ports with %s, naming it", (_, pinned, message) => {
+        const folder = tempFolder();
+        writeConfig(folder, { ports: { PORT_APP: { port: 3000 } }, pinned });
+
+        expect(() => ConfigFile.find(folder)).toThrowError(`leeway: ${message.replace("FILE", path.join(folder, "leeway.json"))}`);
     });
 
     it("accepts the port range edges", () => {

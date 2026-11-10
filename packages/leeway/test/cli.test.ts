@@ -4,7 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { Pools } from "../src/pools.ts";
-import { RangeRegistry } from "../src/range-registry.ts";
+import { type RangeEntry, RangeRegistry } from "../src/range-registry.ts";
 import { LeewayCli } from "./leeway-cli.ts";
 
 const SERVER =
@@ -49,6 +49,42 @@ describe("leeway env --export", () => {
         expect(Object.values(LeewayCli.exportedPorts(first.stdout)).filter(port => !Pools.holds([pool], port))).toEqual([]);
         expect(LeewayCli.claimedFolders(home)).toHaveLength(1);
         expect(second.stdout).toBe(first.stdout);
+    });
+
+    it("prints the pinned ports after the claimed ones, marked pinned in the table, and keeps them out of the range", () => {
+        const { dir, home } = temporaryFolder();
+        fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify({ ...LeewayCli.config, pinned: { PORT_DB: { port: 5432 } } }));
+
+        const result = LeewayCli.run(["env", "--export"], dir, home);
+        const exported = LeewayCli.exportedPorts(result.stdout);
+        const [range] = Object.values(JSON.parse(fs.readFileSync(RangeRegistry.defaultPath(home), "utf8")).folders) as RangeEntry[];
+
+        expect(Object.keys(exported)).toEqual(["PORT_WEB", "PORT_API", "PORT_DB"]);
+        expect(exported.PORT_DB).toBe(5432);
+        expect(result.stderr).toMatch(/PORT_DB +5432 {2}pinned\n/);
+        expect(LeewayCli.run(["env"], dir, home).stdout).toContain("PORT_DB=5432\n");
+        expect(range).toEqual({
+            start: exported.PORT_WEB,
+            end: exported.PORT_API,
+            ports: { PORT_WEB: exported.PORT_WEB, PORT_API: exported.PORT_API },
+        });
+    });
+
+    it("refuses to claim when a pinned port lies inside a pool, naming it and the pool, while --default runs on it", () => {
+        const { dir, home, pool } = temporaryFolder();
+        const pinnedPort = pool.start + 50;
+        fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify({ ...LeewayCli.config, pinned: { PORT_DB: { port: pinnedPort } } }));
+
+        const claim = LeewayCli.run(["env", "--export"], dir, home);
+        const defaults = LeewayCli.run(["--default", "node", "-e", "console.log(process.env.PORT_DB)"], dir, home);
+
+        expect(claim.status).toBe(1);
+        expect(claim.stdout).toBe("");
+        expect(claim.stderr).toBe(
+            `leeway: pinned PORT_DB ${pinnedPort} is inside the pool ${pool.start}-${pool.end}; pin a port outside the machine's pools\n`,
+        );
+        expect(LeewayCli.claimedFolders(home)).toEqual([]);
+        expect(defaults.stdout).toBe(`${pinnedPort}\n`);
     });
 
     it("warns on stderr when the range had to move since the last claim", () => {
@@ -157,6 +193,18 @@ describe("leeway <command>", () => {
 
         expect(LeewayCli.run(["node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, { PORT_WEB: "24000" }).stdout).toBe(expected);
         expect(LeewayCli.run(["node", "-e", PRINT_PORTS, "{{PORT_WEB}}"], dir, home, { CLAUDECODE: "1" }).stdout).toBe(expected);
+    });
+
+    it("hands pinned ports to {{NAME}}, {{LEEWAY_ENV}} and the env in every mode, the config's port unless --inherit finds one", () => {
+        const { dir, home } = temporaryFolder();
+        fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify({ ...LeewayCli.config, pinned: { PORT_DB: { port: 5432 } } }));
+        const printPinned = ["node", "-e", "console.log(process.argv[1], process.env.PORT_DB, JSON.parse(process.argv[2]).PORT_DB)"];
+        const run = (mode: string[]) =>
+            LeewayCli.run([...mode, "--", ...printPinned, "{{PORT_DB}}", "{{LEEWAY_ENV}}"], dir, home, { PORT_DB: "6543" }).stdout;
+
+        expect(run([])).toBe("5432 5432 5432\n");
+        expect(run(["--default"])).toBe("5432 5432 5432\n");
+        expect(run(["--inherit"])).toBe("6543 6543 6543\n");
     });
 
     it("--inherit takes the ports from the environment, else the default ports, without claiming", () => {
@@ -343,14 +391,15 @@ describe("leeway errors", () => {
         expect(LeewayCli.claimedFolders(home)).toEqual([]);
     });
 
-    it("fails on a {{NAME}} that is not in the catalogue, naming it and the catalogue, without claiming or running", () => {
+    it("fails on a {{NAME}} that is not a port name of the config, naming it and the port names, without claiming or running", () => {
         const { dir, home } = temporaryFolder();
+        fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify({ ...LeewayCli.config, pinned: { PORT_DB: { port: 5432 } } }));
 
         const result = LeewayCli.run(["node", "-e", "console.log(process.argv[1])", "{{PORT_WBE}}"], dir, home);
 
         expect(result.status).toBe(1);
         expect(result.stdout).toBe("");
-        expect(result.stderr).toBe("leeway: unknown {{PORT_WBE}} in the command; the catalogue has PORT_WEB, PORT_API\n");
+        expect(result.stderr).toBe("leeway: unknown {{PORT_WBE}} in the command; the config has PORT_WEB, PORT_API, PORT_DB\n");
         expect(LeewayCli.claimedFolders(home)).toEqual([]);
     });
 
