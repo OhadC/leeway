@@ -50,7 +50,13 @@ ignores them.
 | `pinned`     | -       | ports every folder shares (see [Pinned ports](#pinned-ports))          |
 | `agentGuard` | `false` | refuse default ports to agent shells (see [Agent guard](#agent-guard)) |
 
-Unknown settings are refused, so a typo fails loudly.
+Unknown settings are refused, so a typo fails loudly. So are configs that validate but can't work:
+
+- `LEEWAY_ENV` and `LEEWAY_FOLDER` as port names, in any case for `LEEWAY_FOLDER`: leeway uses them itself.
+- two port names that differ only by case, like `port_web` and `PORT_WEB`, anywhere in `ports` and `pinned`: on Windows they are one
+  environment variable.
+- two catalogue entries with the same `port`: default ports would hand it to both servers. Pinned ports may share one, like `PORT_DB` and
+  `PGPORT` for one Postgres.
 
 ### Pinned ports
 
