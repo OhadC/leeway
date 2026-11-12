@@ -70,10 +70,10 @@ async function runLeeway(): Promise<void> {
 
 async function execWithPorts(found: FoundConfig, { mode, command }: ExecRequest): Promise<void> {
     const names = [...Object.keys(found.config.ports), ...Object.keys(found.config.pinned ?? {})];
-    const unknown = ExecCommand.unknownPlaceholders(command, names);
+    const refusal = ExecCommand.refusal(command, names);
 
-    if (unknown.length > 0) {
-        failWith(`leeway: unknown ${unknown.map(name => `{{${name}}}`).join(", ")} in the command; the config has ${names.join(", ")}`);
+    if (refusal) {
+        failWith(refusal);
     }
 
     const ports = await portsOfMode(found, mode);
