@@ -254,7 +254,11 @@ configuration whose `preLaunchTask` writes the file:
 Keep the `cmd.exe` shell on Windows: Windows PowerShell's `>` writes a file dotenv readers can't read.
 
 Use `eval "$(leeway env --export)"` to give a shell its range, after which `devPorts` and tools started without `leeway`
-pick the ports up.
+pick the ports up. In PowerShell:
+
+```powershell
+leeway env | ForEach-Object { $name, $value = $_ -split '=', 2; Set-Item "Env:$name" $value }
+```
 
 ### `leeway list [--json]`
 
@@ -354,6 +358,10 @@ $ leeway pools reset
 - The pools are stored as `pools` in `~/.leeway/ranges.json`. A hand edit leeway can't read makes claims and `leeway pools` fail
   until you fix it, for example with `leeway pools set` or `leeway pools reset`.
 
+**WSL beside Windows**: each side has its own home, so its own registry, while WSL forwards its ports to Windows `localhost`. Both
+start from the default pool and can claim the same range; give each side its own pools, for example `leeway pools set 21000-24999` on
+Windows and `leeway pools set 25000-29999` in WSL.
+
 ## Agents
 
 **Claude Code**: give every session its range up front with a SessionStart hook in `.claude/settings.json`. Claude Code sources
@@ -438,6 +446,27 @@ services:
 
 Move `PORT_DB` from `ports` to `pinned` in the [docker compose](#docker-compose) recipe: `leeway docker compose up -d` in any worktree
 starts the one Postgres on 5432, and `devPorts(config).PORT_DB` is 5432 in every worktree.
+
+### A URL in `.env`
+
+Vite fills `${PORT_API}` in `.env` from the environment, so under `leeway vite` this is the folder's port:
+
+```sh
+VITE_API_URL=http://localhost:${PORT_API}
+```
+
+`node --env-file` does not expand it; build the URL in code from `devPorts` there.
+
+### Preview of a build
+
+Builds keep default ports, so `leeway "vite build && vite preview"` serves on the folder's port a bundle that calls default ports. Inject
+the ports into builds run under `leeway` only:
+
+```ts
+leeway({ config, port: "PORT_WEB", alwaysInject: Boolean(process.env.LEEWAY_FOLDER) });
+```
+
+A plain `vite build` still gets default ports.
 
 ### direnv
 
