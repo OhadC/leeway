@@ -53,3 +53,12 @@ A test must be able to go _red_ on a real bug. Assert observable behaviour throu
 ### The OS is the only boundary
 
 Code that parses OS command output takes an injected `CommandRunner`, so its parsing is unit-tested on any OS. Spawning, signalling and killing real processes runs for real: real-process tests on each OS (Windows locally, linux via `pnpm test:linux`, mac in CI). Everything inside the boundary goes in real.
+
+## Docs
+
+### The README is for users
+
+A README says what a user does and what they see. Leave out why it was built that way (an ADR), how it works inside (the code), version
+history (release notes) and how to work on leeway (`CONTRIBUTING.md`). Test each sentence: would a user act differently for knowing it?
+If not, cut it. `packages/leeway/README.md` is the full reference, shipped in the package where agents in a consumer's repo read it; the
+top-level README is the pitch and quick start.

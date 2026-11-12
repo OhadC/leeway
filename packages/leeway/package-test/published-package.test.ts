@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { Pools } from "../src/pools.ts";
+import { Pools } from "../src/registry/pools.ts";
 import { LeewayCli } from "../test/leeway-cli.ts";
 
 const packageDir = path.resolve(import.meta.dirname, "..");

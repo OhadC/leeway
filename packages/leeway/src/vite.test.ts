@@ -6,7 +6,7 @@ import vm from "node:vm";
 import { build, createServer, type InlineConfig, preview, type PreviewServer, type Rolldown, type ViteDevServer } from "vite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LeewayConfig } from "./dev-ports.ts";
-import { Pools } from "./pools.ts";
+import { Pools } from "./registry/pools.ts";
 import { leeway } from "./vite.ts";
 
 const DEV_PORTS_PATH = path.join(import.meta.dirname, "dev-ports.ts");

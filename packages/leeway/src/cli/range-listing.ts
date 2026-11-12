@@ -1,7 +1,7 @@
-import type { PortListener } from "./listener-scan.ts";
-import { type Pool, Pools } from "./pools.ts";
-import type { ProcessRow } from "./process-tree.ts";
-import { RangeRegistry, type RangeEntry } from "./range-registry.ts";
+import type { PortListener } from "../os/listener-scan.ts";
+import { type Pool, Pools } from "../registry/pools.ts";
+import type { ProcessRow } from "../os/process-tree.ts";
+import { RangeRegistry, type RangeEntry } from "../registry/range-registry.ts";
 
 export type ListedRange = Omit<RangeEntry, "ports"> & {
     ports: ListedPort[];

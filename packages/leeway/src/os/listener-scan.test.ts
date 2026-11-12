@@ -2,7 +2,7 @@ import net from "node:net";
 import { describe, expect, it } from "vitest";
 import { ListenerScan } from "./listener-scan.ts";
 import type { CommandRunner } from "./os-command.ts";
-import { Pools } from "./pools.ts";
+import { Pools } from "../registry/pools.ts";
 
 const WINDOWS_NETSTAT = [
     "",

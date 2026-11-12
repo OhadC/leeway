@@ -3,8 +3,8 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ProcessTree } from "../src/process-tree.ts";
-import { RangeRegistry } from "../src/range-registry.ts";
+import { ProcessTree } from "../src/os/process-tree.ts";
+import { RangeRegistry } from "../src/registry/range-registry.ts";
 import { LeewayCli } from "./leeway-cli.ts";
 
 const SERVER = 'require("node:net").createServer().listen(Number(process.argv[1]), () => console.log("listening"));';

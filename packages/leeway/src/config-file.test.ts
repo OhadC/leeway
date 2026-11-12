@@ -4,8 +4,6 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import schema from "../schema.json" with { type: "json" };
 import { ConfigFile } from "./config-file.ts";
-import { ExecCommand } from "./exec-command.ts";
-import { FolderRange } from "./folder-range.ts";
 
 const folders: string[] = [];
 
@@ -167,7 +165,7 @@ describe("ConfigFile.find", () => {
     });
 
     it("has the schema refuse the port names leeway refuses, so an editor flags them", () => {
-        expect(schema.definitions.portName.not.enum).toEqual([ExecCommand.ALL_PORTS_PLACEHOLDER.slice(2, -2), FolderRange.FOLDER_VARIABLE]);
+        expect(schema.definitions.portName.not.enum).toEqual([ConfigFile.ALL_PORTS_VARIABLE, ConfigFile.FOLDER_VARIABLE]);
     });
 
     it.each([

@@ -3,8 +3,8 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { Pools } from "../src/pools.ts";
-import { type RangeEntry, RangeRegistry } from "../src/range-registry.ts";
+import { Pools } from "../src/registry/pools.ts";
+import { type RangeEntry, RangeRegistry } from "../src/registry/range-registry.ts";
 import { LeewayCli } from "./leeway-cli.ts";
 
 const SERVER =

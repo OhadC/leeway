@@ -3,8 +3,8 @@ import { randomInt } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { Pool } from "../src/pools.ts";
-import { RangeRegistry } from "../src/range-registry.ts";
+import type { Pool } from "../src/registry/pools.ts";
+import { RangeRegistry } from "../src/registry/range-registry.ts";
 
 export class LeewayCli {
     static readonly config = { ports: { PORT_WEB: { port: 5173 }, PORT_API: { port: 3001 } } };

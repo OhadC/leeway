@@ -1,3 +1,4 @@
+import { ConfigFile } from "../config-file.ts";
 export type ExecMode = "claim" | "default" | "inherit";
 
 export type ExecRequest = {
@@ -17,7 +18,7 @@ const PLACEHOLDER = /\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g;
 const CMD_METACHARACTERS = /([()\][%!^"`<>&|;, *?])/g;
 
 export class ExecCommand {
-    static readonly ALL_PORTS_PLACEHOLDER = "{{LEEWAY_ENV}}";
+    static readonly ALL_PORTS_PLACEHOLDER = `{{${ConfigFile.ALL_PORTS_VARIABLE}}}`;
 
     static requestOf(args: readonly string[]): ExecRequest | undefined {
         const flagMode = MODE_FLAGS.get(args[0]);

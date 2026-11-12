@@ -2,8 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import schema from "../schema.json" with { type: "json" };
 import type { LeewayConfig } from "./dev-ports.ts";
-import { ExecCommand } from "./exec-command.ts";
-import { FolderRange } from "./folder-range.ts";
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -18,6 +16,10 @@ export type FoundConfig = {
 
 export class ConfigFile {
     static readonly NAME = "leeway.json";
+
+    static readonly ALL_PORTS_VARIABLE = "LEEWAY_ENV";
+
+    static readonly FOLDER_VARIABLE = "LEEWAY_FOLDER";
 
     static find(from: string): FoundConfig {
         const folder = ConfigFile.folderOf(from);
@@ -131,11 +133,11 @@ export class ConfigFile {
                 );
             }
 
-            if (`{{${name}}}` === ExecCommand.ALL_PORTS_PLACEHOLDER) {
-                throw new Error(`leeway: ${name} in ${file} is reserved for the ${ExecCommand.ALL_PORTS_PLACEHOLDER} placeholder`);
+            if (name === ConfigFile.ALL_PORTS_VARIABLE) {
+                throw new Error(`leeway: ${name} in ${file} is reserved for the {{${name}}} placeholder`);
             }
 
-            if (name.toUpperCase() === FolderRange.FOLDER_VARIABLE) {
+            if (name.toUpperCase() === ConfigFile.FOLDER_VARIABLE) {
                 throw new Error(`leeway: ${name} in ${file} is reserved for the folder leeway hands down`);
             }
 

@@ -1,7 +1,7 @@
-import type { PortListener } from "./listener-scan.ts";
-import { type Pool, Pools } from "./pools.ts";
+import type { PortListener } from "../os/listener-scan.ts";
+import { type Pool, Pools } from "../registry/pools.ts";
 import { RangeListing } from "./range-listing.ts";
-import { RangeRegistry, type RangeEntry } from "./range-registry.ts";
+import { RangeRegistry, type RangeEntry } from "../registry/range-registry.ts";
 
 export type KillPlan = RangePlan | OrphanPlan;
 
