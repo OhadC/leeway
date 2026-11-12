@@ -935,6 +935,23 @@ describe("RangeRegistry.testPort", () => {
 
         expect([whileListening, await RangeRegistry.testPort(port)]).toEqual(["in-use", "free"]);
     });
+
+    it("reports a port with a listener on ::1 only as in use, and the same port free once the listener closes", async ({ skip }) => {
+        const server = net.createServer();
+        const listening = await new Promise<boolean>((resolve, reject) => {
+            server.once("error", (error: NodeJS.ErrnoException) =>
+                ["EADDRNOTAVAIL", "EAFNOSUPPORT"].includes(error.code ?? "") ? resolve(false) : reject(error),
+            );
+            server.listen({ port: 0, host: "::1" }, () => resolve(true));
+        });
+        skip(!listening, "this machine can't bind ::1");
+        const { port } = server.address() as net.AddressInfo;
+
+        const whileListening = await RangeRegistry.testPort(port);
+        await new Promise(resolve => server.close(resolve));
+
+        expect([whileListening, await RangeRegistry.testPort(port)]).toEqual(["in-use", "free"]);
+    });
 });
 
 describe("RangeRegistry.livingEntries", () => {
