@@ -122,8 +122,9 @@ value that isn't an integer 1-65535 throws, naming the port name and the value. 
 
 With `"agentGuard": true`, `devPorts` throws in an agent shell (`CLAUDECODE`, `GEMINI_CLI`, `CURSOR_AGENT` or `AI_AGENT` set) when none
 of the catalogue's variables are set, so an agent can't silently start a server on your default ports. It is off by default. It is skipped
-under `VITEST`, because app modules often read ports at import time in tests. Codex sets no reliable marker, and Copilot and Aider document
-none, so for them the guard can't fire; tell them to start servers through `leeway` (see [Agents](#agents)).
+under vitest (`VITEST`) and jest (`JEST_WORKER_ID`), because app modules often read ports at import time in tests. Codex sets no
+reliable marker, and Copilot and Aider document none, so for them the guard can't fire; tell them to start servers through `leeway` (see
+[Agents](#agents)).
 
 ## Vite: `leeway/vite`
 
