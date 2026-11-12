@@ -44,7 +44,7 @@ async function runLeeway(): Promise<void> {
         await printEnvLines(ConfigFile.find(process.cwd()), rest[0] === "--export");
     } else if (subcommand === "list" && (rest.length === 0 || (rest.length === 1 && rest[0] === "--json"))) {
         const pools = RangeRegistry.pools();
-        const listing = RangeListing.collect(RangeRegistry.livingEntries(), ListenerScan.listeners(), pools, ProcessTree.rows());
+        const listing = RangeListing.collect(RangeRegistry.livingEntries(), ListenerScan.listeners(), pools, () => ProcessTree.rows());
 
         process.stdout.write(
             rest.length === 0

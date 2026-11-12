@@ -22,7 +22,7 @@ type ListedPort = {
 export class RangeListing {
     private static readonly SHORT_COMMAND_LENGTH = 60;
 
-    static collect(entries: RangeEntry[], listeners: PortListener[], pools: Pool[], processRows: ProcessRow[]): Listing {
+    static collect(entries: RangeEntry[], listeners: PortListener[], pools: Pool[], readProcessRows: () => ProcessRow[]): Listing {
         const ranges = [...entries]
             .sort((left, right) => left.start - right.start)
             .map(entry => ({
@@ -38,12 +38,11 @@ export class RangeListing {
                     })),
             }));
         const orphans = RangeListing.orphans(entries, listeners, pools);
-        const listedPids = new Set([
-            ...ranges.flatMap(range => range.ports.flatMap(listed => listed.pids)),
-            ...orphans.map(orphan => orphan.pid),
-        ]);
+        const listedPids = [...ranges.flatMap(range => range.ports.flatMap(listed => listed.pids)), ...orphans.map(orphan => orphan.pid)];
+        const visiblePids = new Set(listedPids.filter(pid => pid !== null));
+        const processRows = visiblePids.size > 0 ? readProcessRows() : [];
         const commands = Object.fromEntries(
-            processRows.filter(row => listedPids.has(row.pid) && row.commandLine !== "").map(row => [String(row.pid), row.commandLine]),
+            processRows.filter(row => visiblePids.has(row.pid) && row.commandLine !== "").map(row => [String(row.pid), row.commandLine]),
         );
 
         return { ranges, orphans, commands };
