@@ -103,7 +103,8 @@ repo on the machine:
 - Ports held by something else, or reserved by the OS, are skipped at claim time.
 - Ranges of folders that no longer exist are dropped the next time a claim has to place a range; `leeway release` releases the range of
   a folder that still exists.
-- Claims are serialised by a lock next to the registry, so concurrent `leeway` runs never get the same range.
+- Claims are serialised by a lock next to the registry, so concurrent `leeway` runs never get the same range. A run that can't get the
+  lock within 30 seconds fails, naming the lock to delete if no `leeway` is running.
 - Repos on different leeway versions share the registry: from 0.3 on, no version refuses it, a claim keeps data it doesn't understand,
   and every readable range holds its ports.
 
