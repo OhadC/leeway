@@ -1,10 +1,11 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest";
 import { Pools } from "../src/registry/pools.ts";
 import { LeewayCli } from "../test/leeway-cli.ts";
+import { Listeners } from "../test/listeners.ts";
 
 const packageDir = path.resolve(import.meta.dirname, "..");
 const packageJson = readJson(path.join(packageDir, "package.json"));
@@ -18,6 +19,7 @@ const consumers: Consumer[] = [devConsumer, { vite: "^7", dir: path.join(scratch
 const CONSUMER_FILES: Record<string, string> = {
     "leeway.json": JSON.stringify(catalogue),
     "print-port.mjs": "console.log(process.env.PORT_WEB);\n",
+    "watcher.mjs": Listeners.watcherScript,
     "imports.mjs": `import { devPorts } from "leeway";
 import { leeway } from "leeway/vite";
 import schema from "leeway/schema.json" with { type: "json" };
@@ -122,6 +124,23 @@ describe("the installed leeway bin", () => {
 
         expect(leewayIn(["node", "print-port.mjs"]).trim()).toBe(String(claimed));
     });
+
+    it("kills the leeway run above a listener with kill, so a watcher can't restart it", async () => {
+        const port = LeewayCli.exportedPorts(leewayIn(["env", "--export"])).PORT_WEB;
+        const leeway = spawn("npx leeway node watcher.mjs", {
+            cwd: devConsumer.dir,
+            env: LeewayCli.env(homeDir, {}),
+            stdio: ["ignore", "pipe", "inherit"],
+            shell: true,
+        });
+        onTestFinished(() => Listeners.stopTree(leeway));
+
+        await new Promise(resolve => leeway.stdout.once("data", resolve));
+
+        expect(leewayIn(["kill"])).toContain(`PORT_WEB ${port}  killed`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        expect(await Listeners.accepts(port)).toBe(false);
+    }, 60_000);
 });
 
 describe.each(consumers)("the installed leeway entries on vite $vite", consumer => {
