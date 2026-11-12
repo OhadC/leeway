@@ -358,7 +358,7 @@ $ leeway pools reset
 - The pools are stored as `pools` in `~/.leeway/ranges.json`. A hand edit leeway can't read makes claims and `leeway pools` fail
   until you fix it, for example with `leeway pools set` or `leeway pools reset`.
 
-**WSL beside Windows**: each side has its own home, so its own registry, while WSL forwards its ports to Windows `localhost`. Both
+**WSL beside Windows**: each side has its own `~/.leeway/ranges.json`, while WSL forwards its ports to Windows `localhost`. Both
 start from the default pool and can claim the same range; give each side its own pools, for example `leeway pools set 21000-24999` on
 Windows and `leeway pools set 25000-29999` in WSL.
 
@@ -449,24 +449,25 @@ starts the one Postgres on 5432, and `devPorts(config).PORT_DB` is 5432 in every
 
 ### A URL in `.env`
 
-Vite fills `${PORT_API}` in `.env` from the environment, so under `leeway vite` this is the folder's port:
+Vite fills `${PORT_API}` in `.env` from the environment, so under `leeway vite` this is the folder's port, and without `leeway` the
+default port after `:-`:
 
 ```sh
-VITE_API_URL=http://localhost:${PORT_API}
+VITE_API_URL=http://localhost:${PORT_API:-3001}
 ```
 
-`node --env-file` does not expand it; build the URL in code from `devPorts` there.
+`node --env-file` does not expand it.
 
 ### Preview of a build
 
-Builds keep default ports, so `leeway "vite build && vite preview"` serves on the folder's port a bundle that calls default ports. Inject
-the ports into builds run under `leeway` only:
+`devPorts` in a build keeps default ports, so `leeway "vite build && vite preview"` serves the bundle on the folder's port, but the bundle
+calls default ports. Inject the ports into builds run under `leeway` only:
 
 ```ts
 leeway({ config, port: "PORT_WEB", alwaysInject: Boolean(process.env.LEEWAY_FOLDER) });
 ```
 
-A plain `vite build` still gets default ports.
+A plain `vite build` still gets default ports, even in a shell given its range by `leeway env`.
 
 ### direnv
 
