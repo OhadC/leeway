@@ -34,7 +34,7 @@ describe("RangeRegistry.claim", () => {
         const again = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"]);
 
         expect(first).toEqual({ folder: "/repo", start: 21001, end: 21002, ports: { PORT_A: 21001, PORT_B: 21002 } });
-        expect(again).toEqual({ entry: first, previous: first });
+        expect(again).toEqual({ entry: first, previous: first, inUse: {} });
         expect(Object.keys(readRegistry(registryPath).folders)).toEqual(["/other", "/repo"]);
     });
 
@@ -161,17 +161,18 @@ describe("RangeRegistry.claim", () => {
         expect(entry).toEqual({ folder: "/repo", start: 21004, end: 21005, ports: { PORT_A: 21004, PORT_B: 21005 } });
     });
 
-    it("keeps a folder's range while its own servers listen on it", async () => {
+    it("keeps a folder's range while its own servers listen on it, reporting the ports in use", async () => {
         const registryPath = createRegistryPath({
             version: 1,
             folders: { "/repo": { start: 21010, end: 21011, ports: { PORT_A: 21010, PORT_B: 21011 } } },
         });
 
-        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C"], {
+        const { entry, inUse } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C"], {
             testPort: portStates({ 21010: "in-use", 21011: "in-use" }),
         });
 
         expect(entry).toEqual({ folder: "/repo", start: 21010, end: 21012, ports: { PORT_A: 21010, PORT_B: 21011, PORT_C: 21012 } });
+        expect(inUse).toEqual({ PORT_A: 21010, PORT_B: 21011 });
     });
 
     it("moves a folder when one of its ports with no listener has become unavailable", async () => {
@@ -356,6 +357,35 @@ describe("RangeRegistry.claim", () => {
         expect(await claim(registryPath, "/fits", ["PORT_A", "PORT_B", "PORT_C", "PORT_D"])).toMatchObject({
             entry: { start: 29996, end: 29999 },
         });
+    });
+});
+
+describe("RangeRegistry.claim with move", () => {
+    it("places the range in the first gap sharing no port with the old range or another folder's", async () => {
+        const registryPath = createRegistryPath({
+            version: 1,
+            folders: {
+                "/low": { start: 21000, end: 21001, ports: { PORT_X: 21000, PORT_Y: 21001 } },
+                "/repo": { start: 21002, end: 21004, ports: { PORT_A: 21002, PORT_B: 21003, PORT_C: 21004 } },
+                "/next": { start: 21007, end: 21007, ports: { PORT_X: 21007 } },
+            },
+        });
+
+        const { entry, previous } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C"], { move: true });
+
+        expect(previous).toEqual({ folder: "/repo", start: 21002, end: 21004, ports: { PORT_A: 21002, PORT_B: 21003, PORT_C: 21004 } });
+        expect(entry).toEqual({ folder: "/repo", start: 21008, end: 21010, ports: { PORT_A: 21008, PORT_B: 21009, PORT_C: 21010 } });
+        expect(readRegistry(registryPath).folders["/repo"]).toEqual({ start: 21008, end: 21010, ports: entry.ports });
+    });
+
+    it("fails with the no room message and keeps the old range when only its own ports would fit", async () => {
+        const folders = { "/repo": { start: 21000, end: 21001, ports: { PORT_A: 21000, PORT_B: 21001 } } };
+        const registryPath = createRegistryPath({ version: 1, pools: [{ start: 21000, end: 21002 }], folders });
+
+        await expect(claim(registryPath, "/repo", ["PORT_A", "PORT_B"], { move: true })).rejects.toThrow(
+            /no room for 2 ports in 21000-21002/,
+        );
+        expect(readRegistry(registryPath).folders).toEqual(folders);
     });
 });
 

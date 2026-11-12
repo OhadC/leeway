@@ -12,17 +12,12 @@ export class FolderRange {
         return isSameFolder && Object.keys(config.ports).every(name => env[name]) ? devPorts(config, env) : undefined;
     }
 
-    static claim({ folder, config }: FoundConfig): Promise<RangeClaim> {
-        return RangeRegistry.claim({
-            registryPath: RangeRegistry.defaultPath(os.homedir()),
-            folder,
-            names: Object.keys(config.ports),
-            pinned: FolderRange.pinnedPorts(config),
-            platform: process.platform,
-            pathExists: fs.existsSync,
-            testPort: RangeRegistry.testPort,
-            now: Date.now,
-        });
+    static claim(found: FoundConfig): Promise<RangeClaim> {
+        return FolderRange.claimRange(found, false);
+    }
+
+    static move(found: FoundConfig): Promise<RangeClaim> {
+        return FolderRange.claimRange(found, true);
     }
 
     static pinnedPorts({ pinned = {} }: LeewayConfig): Record<string, number> {
@@ -57,5 +52,19 @@ export class FolderRange {
             );
 
         return lines.length > 0 ? lines.join("") : undefined;
+    }
+
+    private static claimRange({ folder, config }: FoundConfig, move: boolean): Promise<RangeClaim> {
+        return RangeRegistry.claim({
+            registryPath: RangeRegistry.defaultPath(os.homedir()),
+            folder,
+            names: Object.keys(config.ports),
+            pinned: FolderRange.pinnedPorts(config),
+            move,
+            platform: process.platform,
+            pathExists: fs.existsSync,
+            testPort: RangeRegistry.testPort,
+            now: Date.now,
+        });
     }
 }

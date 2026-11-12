@@ -85,6 +85,14 @@ shares both, so no two folders get the same ports.
   that fell outside the narrower range.
 - A folder keeps its range while its ports are free (or held by its own servers). Otherwise the range moves to free ports and leeway warns:
   restart anything still on the old ports.
+- leeway can't tell the folder's own servers from something else on one of its ports, so a claim that finds one in use keeps the range
+  and names the holder with the fix: `leeway kill` for a server of this folder that should not still be running, [`leeway move`](#leeway-move) for anything else.
+
+    ```
+    leeway: 21001 (PORT_API) is in use by pid 4412 (postgres -D data), which leeway did not start; if it's this folder's, leeway kill; if not, leeway move
+    leeway: 21000 (PORT_WEB) is in use by pid 5120 (node.exe vite.js), started by leeway; if it shouldn't still be running, stop it with leeway kill
+    ```
+
 - A deleted folder's range is freed by a later claim that needs room; `leeway release` frees a range right away, whether or not its
   folder still exists.
 - Concurrent `leeway` runs never get the same range. A run that waits over 30 seconds for another fails, naming the lock file to delete
@@ -301,6 +309,12 @@ under `leeway` is killed with the nearest `leeway` run above it and that run's w
 their run. Ports outside every range and every pool are refused. `leeway kill --orphans` kills every orphan in every pool the same way,
 exactly the ones `leeway list` shows, and leaves living ranges alone.
 
+### `leeway move`
+
+Claims this folder a new range sharing no port with its current one, for when something else holds one of its ports. It prints the new
+ports and the moved warning, and kills nothing: restart the folder's servers so they take the new ports. A folder without a range gets a
+plain claim.
+
 ### `leeway release [<folder>]`
 
 Drops this folder's range from the registry, or with a path, that folder's (with or without a `leeway.json`, existing or not), so its
@@ -441,7 +455,7 @@ eval "$(npx leeway env --export)"
 - On Linux and macOS the command runs in its own session, so it has no controlling terminal:
   it still reads keys from stdin, but tools that open `/dev/tty` directly (some password prompts, full-screen TUIs) fail.
 - A port can be taken between the claim and your server binding it. `strictPort` and bind errors make that a loud failure, not a silent
-  drift.
+  drift; `leeway move` gets the folder a new range.
 - Pools are never compacted, so they can fragment. When no pool has room, the claim fails with a message naming every pool; release unused
   folders' ranges with `leeway release <folder>`.
 - leeway before 0.3 ignores pools: a repo on an older version still claims in 21000-29999, whatever `leeway pools set` says.

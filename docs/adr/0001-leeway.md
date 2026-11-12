@@ -62,7 +62,9 @@ can. When the range moves, the CLI warns on stderr; when it stays put but a port
 **Port test.** It binds `127.0.0.1`, `::1`, `0.0.0.0` and `::`, because on Windows a wildcard bind succeeds while something listens on a
 loopback address (vite on `::1`). A missing address family is skipped. The result is free, in-use or unavailable (reserved, access
 denied). A folder's own in-use ports pass, since they are its running servers; an unavailable port moves the range, so a port the OS
-reserved since the last run relocates the range instead of failing the server.
+reserved since the last run relocates the range instead of failing the server. A claim cannot tell its folder's servers from a squatter,
+so it keeps the range and names each in-use port's holder, saying whether a leeway run started it, with `leeway kill` and `leeway move` as
+the fixes; a move takes a range sharing no port with the old one, so the folder's servers that still work restart cleanly.
 
 **Lock and writes.** The lock is a directory next to the registry holding one file named by its holder's random token, taken by renaming a
 prepared directory into place so it is never seen empty while held. Waiters retry; a token older than ten seconds is deleted so a crash
