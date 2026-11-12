@@ -28,6 +28,14 @@ export class ListenerScan {
 
 Order a module by how a reader arrives: exported and public members first, private members next, module-level helper functions at the bottom.
 
+### Make invalid states unrepresentable
+
+Type each value so only its real states can be built: no flags plus optional fields, no sentinels (`-1`, `""`, `0` meaning "none"), no `as` on your own data. Do it where the value is produced, and add a literal-tagged union only when consumers must branch. A shape built in one place that only emits valid states is fine.
+
+### Spot the implicit state machine
+
+Code that juggles flags or in-flight work across async steps is a state machine whether you name it or not. At every `await`, decide what happens if the world moved on: another process took the lock, a failure returned as a value, data read before the step. Make it explicit (one state value, one place that changes it) only when a transition you didn't intend is still possible.
+
 ### Code that explains itself
 
 Rename or extract until the code reads plainly. The code carries no comments, with one exception: what a package entry (`index.ts`, `vite.ts`) exports gets JSDoc stating the behaviour its signature can't show. The built `.d.mts` types keep that JSDoc, and they are the only docs an agent in a consumer's repo reads.
