@@ -97,8 +97,8 @@ fails instead of drifting. `preview.port` uses the dev server's port name unless
 sees the server's ports; other bundlers get the same from `{{LEEWAY_ENV}}`. Builds keep default ports unless `alwaysInject` is set, so dev ports never leak into a production bundle.
 
 **Agents.** Agents forget rules, so a repo can make forgetting loud. With `"agentGuard": true`, `devPorts` throws in an agent shell (`CLAUDECODE`, `GEMINI_CLI`,
-`CURSOR_AGENT`, `AI_AGENT`) when none of the catalogue's variables are set, except under `VITEST`, where app modules read ports at import
-time. The guard is off by default: a repo whose agents always go through `leeway` doesn't need it, and on it blocks every tool an agent
+`CURSOR_AGENT`, `AI_AGENT`) when none of the catalogue's variables are set, except under vitest (`VITEST`) and jest (`JEST_WORKER_ID`),
+where app modules read ports at import time. The guard is off by default: a repo whose agents always go through `leeway` doesn't need it, and on it blocks every tool an agent
 starts outside `leeway` without ports. Claude Code gets its range up front: a SessionStart hook appends `leeway env --export` to `$CLAUDE_ENV_FILE`, which is sourced before
 every Bash command. Claude Code's PowerShell tool honours that file only when every line is a plain export, so `leeway env --export` writes only `export NAME=port` lines to stdout and everything else to
 stderr. The earlier `dev-ports` rewrote every `pnpm <script>` in a PreToolUse hook; exporting the range once per session covers every command,
