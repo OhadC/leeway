@@ -39,8 +39,9 @@
     },
     "definitions": {
         "portName": {
-            "description": "A port name: letters, digits and _, not starting with a digit.",
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            "description": "A port name: letters, digits and _, not starting with a digit. LEEWAY_ENV and LEEWAY_FOLDER are leeway's own, and no two port names may differ only by case.",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "not": { "enum": ["LEEWAY_ENV", "LEEWAY_FOLDER"] }
         },
         "entry": {
             "description": "A port entry. Any properties besides port are yours; leeway ignores them.",
