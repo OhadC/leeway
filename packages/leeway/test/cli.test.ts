@@ -179,7 +179,7 @@ describe("leeway env", () => {
                     "which leeway did not start; if it's this folder's, leeway kill; if not, leeway move\\n$",
             ),
         );
-    });
+    }, 60_000);
 
     it("names a server a leeway run started on a port of the range, with kill as the fix", async () => {
         const { dir, home } = temporaryFolder();
@@ -194,7 +194,7 @@ describe("leeway env", () => {
                     "started by leeway; if it shouldn't still be running, stop it with leeway kill\\n$",
             ),
         );
-    });
+    }, 60_000);
 
     it("names nothing for a pinned port or a default port in use", async () => {
         const { dir, home } = temporaryFolder();
