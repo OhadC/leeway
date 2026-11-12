@@ -454,6 +454,12 @@ eval "$(npx leeway env --export)"
 - On Windows, a command that exits while leaving background grandchildren behind can leave them running too; `leeway kill` again.
 - On Linux and macOS the command runs in its own session, so it has no controlling terminal:
   it still reads keys from stdin, but tools that open `/dev/tty` directly (some password prompts, full-screen TUIs) fail.
+- Ctrl+Z on Linux and macOS suspends `leeway` alone: the command, in its own session, keeps running on its ports. `fg`, then Ctrl+C,
+  stops it.
+- `nohup leeway <command>` doesn't outlive the terminal: `leeway` still gets the hangup and stops the command tree. In bash or zsh, use
+  `leeway <command> > leeway.log 2>&1 & disown` instead.
+- On Windows, Ctrl+C force-kills the command tree at once, so a command that cleans up on Ctrl+C may die before it finishes. Run such a
+  command in the background and stop it with its own stop command.
 - A port can be taken between the claim and your server binding it. `strictPort` and bind errors make that a loud failure, not a silent
   drift; `leeway move` gets the folder a new range.
 - Pools are never compacted, so they can fragment. When no pool has room, the claim fails with a message naming every pool; release unused
