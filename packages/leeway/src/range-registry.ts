@@ -278,7 +278,7 @@ export class RangeRegistry {
         const ownPorts = new Set(Object.values(current.ports));
         const blocked = await RangeRegistry.firstBlockedPort(current.start, names.length, stored, pools, ownPorts, testPort);
 
-        return blocked === undefined ? RangeRegistry.rangeAt(current.start, names) : undefined;
+        return blocked === undefined ? RangeRegistry.rangeAt(current.start, names, current) : undefined;
     }
 
     private static async place(
@@ -293,7 +293,7 @@ export class RangeRegistry {
             RangeRegistry.firstBlockedPort(start, names.length, occupied, pools, ownPorts, testPort);
 
         if (current && (await firstBlockedPort(current.start)) === undefined) {
-            return RangeRegistry.rangeAt(current.start, names);
+            return RangeRegistry.rangeAt(current.start, names, current);
         }
 
         for (const pool of pools) {
@@ -301,7 +301,7 @@ export class RangeRegistry {
                 const blocked = await firstBlockedPort(start);
 
                 if (blocked === undefined) {
-                    return RangeRegistry.rangeAt(start, names);
+                    return RangeRegistry.rangeAt(start, names, current);
                 }
 
                 start = blocked + 1;
@@ -400,12 +400,23 @@ export class RangeRegistry {
         return undefined;
     }
 
-    private static rangeAt(start: number, names: readonly string[]): StoredRange {
-        return {
-            start,
-            end: start + names.length - 1,
-            ports: Object.fromEntries(names.map((name, index) => [name, start + index])),
-        };
+    private static rangeAt(start: number, names: readonly string[], previous: StoredRange | undefined): StoredRange {
+        const end = start + names.length - 1;
+        const kept = new Map<string, number>();
+        const keptPorts = new Set<number>();
+
+        for (const name of names) {
+            const port = previous && Object.hasOwn(previous.ports, name) ? previous.ports[name] : undefined;
+
+            if (port !== undefined && port >= start && port <= end && !keptPorts.has(port)) {
+                kept.set(name, port);
+                keptPorts.add(port);
+            }
+        }
+
+        const freePorts = Array.from({ length: names.length }, (_, index) => start + index).filter(port => !keptPorts.has(port));
+
+        return { start, end, ports: Object.fromEntries(names.map(name => [name, kept.get(name) ?? freePorts.shift()!])) };
     }
 
     private static write(registryPath: string, registry: RegistryFile): void {

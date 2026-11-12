@@ -102,6 +102,7 @@ describe("leeway env --export", () => {
         expect(moved.stdout).toMatch(/^(export [A-Z_][A-Z0-9_]*=\d+\n){3}$/);
         expect(LeewayCli.exportedPorts(moved.stdout).PORT_WEB).not.toBe(first.PORT_WEB);
         expect(moved.stderr).toContain(`range moved from ${first.PORT_WEB}-${first.PORT_API}`);
+        expect(moved.stderr).not.toMatch(/PORT_\w+ moved/);
     });
 
     it("does not warn when the range stays put", () => {
@@ -110,6 +111,34 @@ describe("leeway env --export", () => {
         LeewayCli.run(["env", "--export"], dir, home);
 
         expect(LeewayCli.run(["env", "--export"], dir, home).stderr).not.toContain("moved");
+    });
+
+    it("does not warn when a port name is added in the middle of the catalogue", () => {
+        const { dir, home } = temporaryFolder();
+
+        const first = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
+        fs.writeFileSync(
+            path.join(dir, "leeway.json"),
+            JSON.stringify({ ports: { PORT_WEB: { port: 5173 }, PORT_NEW: { port: 8080 }, PORT_API: { port: 3001 } } }),
+        );
+        const grown = LeewayCli.run(["env"], dir, home);
+
+        expect(grown.stdout).toBe(`PORT_WEB=${first.PORT_WEB}\nPORT_NEW=${first.PORT_API! + 1}\nPORT_API=${first.PORT_API}\n`);
+        expect(grown.stderr).not.toContain("moved");
+    });
+
+    it("warns on stderr about each port name whose port changed while the range stayed put", () => {
+        const { dir, home } = temporaryFolder();
+
+        const first = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
+        fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify({ ports: { PORT_API: { port: 3001 } } }));
+        const shrunk = LeewayCli.run(["env"], dir, home);
+
+        expect(shrunk.stdout).toBe(`PORT_API=${first.PORT_WEB}\n`);
+        expect(shrunk.stderr).toContain(
+            `leeway: PORT_API moved from ${first.PORT_API} to ${first.PORT_WEB}; restart anything still using the old port\n`,
+        );
+        expect(shrunk.stderr).not.toContain("range moved");
     });
 });
 

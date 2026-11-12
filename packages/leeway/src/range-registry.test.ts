@@ -3,7 +3,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { RangeRegistry, type ClaimRangeOptions, type PortBindState } from "./range-registry.ts";
+import { RangeRegistry, type ClaimRangeOptions, type PortBindState, type RangeEntry } from "./range-registry.ts";
 
 const cleanups: (() => void)[] = [];
 
@@ -60,7 +60,7 @@ describe("RangeRegistry.claim", () => {
 
         const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"]);
 
-        expect(entry).toEqual({ folder: "/repo", start: 21002, end: 21003, ports: { PORT_A: 21002, PORT_B: 21003 } });
+        expect(entry).toEqual({ folder: "/repo", start: 21002, end: 21003, ports: { PORT_A: 21003, PORT_B: 21002 } });
     });
 
     it("moves a folder whose range lies outside the pool into the pool", async () => {
@@ -356,6 +356,102 @@ describe("RangeRegistry.claim", () => {
         expect(await claim(registryPath, "/fits", ["PORT_A", "PORT_B", "PORT_C", "PORT_D"])).toMatchObject({
             entry: { start: 29996, end: 29999 },
         });
+    });
+});
+
+describe("RangeRegistry.claim port layout", () => {
+    const REPO = { start: 21010, end: 21013, ports: { PORT_A: 21010, PORT_B: 21011, PORT_C: 21012, PORT_D: 21013 } };
+
+    it("leaves every port name on its port when one is added in the middle, writing the ports in catalogue order", async () => {
+        const registryPath = createRegistryPath({ version: 1, folders: { "/repo": REPO } });
+
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_NEW", "PORT_B", "PORT_C", "PORT_D"]);
+
+        expect(entry.ports).toEqual({ PORT_A: 21010, PORT_NEW: 21014, PORT_B: 21011, PORT_C: 21012, PORT_D: 21013 });
+        expect(Object.keys((readRegistry(registryPath).folders["/repo"] as RangeEntry).ports)).toEqual([
+            "PORT_A",
+            "PORT_NEW",
+            "PORT_B",
+            "PORT_C",
+            "PORT_D",
+        ]);
+    });
+
+    it("leaves every port name on its port when one is added at the front", async () => {
+        const registryPath = createRegistryPath({ version: 1, folders: { "/repo": REPO } });
+
+        const { entry } = await claim(registryPath, "/repo", ["PORT_NEW", "PORT_A", "PORT_B", "PORT_C", "PORT_D"]);
+
+        expect(entry.ports).toEqual({ PORT_NEW: 21014, PORT_A: 21010, PORT_B: 21011, PORT_C: 21012, PORT_D: 21013 });
+    });
+
+    it("changes no port when the catalogue is reordered", async () => {
+        const registryPath = createRegistryPath({ version: 1, folders: { "/repo": REPO } });
+
+        const { entry } = await claim(registryPath, "/repo", ["PORT_D", "PORT_B", "PORT_A", "PORT_C"]);
+
+        expect(entry.ports).toEqual(REPO.ports);
+    });
+
+    it("gives a renamed port name the port of the name it replaced", async () => {
+        const registryPath = createRegistryPath({ version: 1, folders: { "/repo": REPO } });
+
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_RENAMED", "PORT_C", "PORT_D"]);
+
+        expect(entry.ports).toEqual({ PORT_A: 21010, PORT_RENAMED: 21011, PORT_C: 21012, PORT_D: 21013 });
+    });
+
+    it("moves only the port names whose port fell outside the narrower range when one is removed from the middle", async () => {
+        const registryPath = createRegistryPath({ version: 1, folders: { "/repo": REPO } });
+
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_C", "PORT_D"]);
+
+        expect(entry).toEqual({ folder: "/repo", start: 21010, end: 21012, ports: { PORT_A: 21010, PORT_C: 21012, PORT_D: 21011 } });
+    });
+
+    it("moves no port name when the last one is removed", async () => {
+        const registryPath = createRegistryPath({ version: 1, folders: { "/repo": REPO } });
+
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C"]);
+
+        expect(entry.ports).toEqual({ PORT_A: 21010, PORT_B: 21011, PORT_C: 21012 });
+    });
+
+    it("keeps the ports still inside a moved range that overlaps the old one", async () => {
+        const registryPath = createRegistryPath({
+            version: 1,
+            folders: {
+                "/low": { start: 21000, end: 21001, ports: { PORT_X: 21000, PORT_Y: 21001 } },
+                "/repo": { start: 21004, end: 21005, ports: { PORT_A: 21004, PORT_B: 21005 } },
+                "/next": { start: 21006, end: 21006, ports: { PORT_X: 21006 } },
+            },
+        });
+
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C"]);
+
+        expect(entry).toEqual({ folder: "/repo", start: 21002, end: 21004, ports: { PORT_A: 21004, PORT_B: 21002, PORT_C: 21003 } });
+    });
+
+    it("lets the first of two port names sharing a port keep it, and gives the other a free port", async () => {
+        const registryPath = createRegistryPath({
+            version: 1,
+            folders: { "/repo": { start: 21010, end: 21012, ports: { PORT_A: 21011, PORT_B: 21011, PORT_C: 21012 } } },
+        });
+
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C"]);
+
+        expect(entry.ports).toEqual({ PORT_A: 21011, PORT_B: 21010, PORT_C: 21012 });
+    });
+
+    it("lays the ports out in catalogue order when the previous ports are unreadable", async () => {
+        const registryPath = createRegistryPath({
+            version: 1,
+            folders: { "/repo": { start: 21010, end: 21012, ports: { PORT_C: 21010, PORT_A: "21011" } } },
+        });
+
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B", "PORT_C"]);
+
+        expect(entry.ports).toEqual({ PORT_A: 21010, PORT_B: 21011, PORT_C: 21012 });
     });
 });
 

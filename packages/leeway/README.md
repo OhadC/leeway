@@ -96,7 +96,9 @@ repo on the machine:
 }
 ```
 
-- A range is exactly as wide as the catalogue; ports follow the catalogue's order.
+- A range is exactly as wide as the catalogue. A port name keeps its port while it stays in the catalogue and its port is inside the
+  range; new port names take the ports nobody holds, low to high, in catalogue order. Adding, reordering or renaming port names moves no
+  port, and removing one moves only the port names whose port fell outside the narrower range.
 - A claim keeps the folder's current range whenever it sits inside one pool and its ports are still free (or held by the folder's own
   running servers). Otherwise it takes the first gap, pools in the order they were set and each pool from low to high, that overlaps no
   other range and whose ports can all be bound, and warns that the range moved. A range never spans two pools.
@@ -233,6 +235,12 @@ export PORT_API=21001
 
 stdout carries only those lines; the port table and warnings go to stderr. If the range moved since the last claim, stderr says so:
 restart anything still on the old ports. Under a `leeway` run for the same folder, either form prints the ports that run was given.
+
+If the range stayed put but a port name's port changed, as when a port name is removed, stderr names each one:
+
+```text
+leeway: PORT_API moved from 21002 to 21001; restart anything still using the old port
+```
 
 Feed `leeway env` to anything that reads a dotenv file: `node --env-file`, `docker compose --env-file`, or a VS Code launch
 configuration whose `preLaunchTask` writes the file:

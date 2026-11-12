@@ -58,7 +58,7 @@ _Avoid_: state, database, lockfile
 
 **Claim**:
 Taking a range for a folder: its current range when still usable, else the first usable gap, pools in set order and each pool low to
-high. A range that changes on a claim has moved.
+high. A range that changes on a claim has moved, as has a port name whose port changes.
 _Avoid_: allocate, assign, lease, reserve
 
 **Release**:
