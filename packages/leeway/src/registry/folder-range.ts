@@ -1,14 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
-import type { FoundConfig } from "./config-file.ts";
-import { devPorts, type LeewayConfig, type LeewayEnv } from "./dev-ports.ts";
+import { ConfigFile, type FoundConfig } from "../config-file.ts";
+import { devPorts, type LeewayConfig, type LeewayEnv } from "../dev-ports.ts";
 import { type RangeClaim, type RangeEntry, RangeRegistry } from "./range-registry.ts";
 
 export class FolderRange {
-    static readonly FOLDER_VARIABLE = "LEEWAY_FOLDER";
-
     static inheritedPorts({ folder, config }: FoundConfig, env: LeewayEnv, platform: NodeJS.Platform): Record<string, number> | undefined {
-        const outerFolder = env[FolderRange.FOLDER_VARIABLE];
+        const outerFolder = env[ConfigFile.FOLDER_VARIABLE];
         const isSameFolder = typeof outerFolder === "string" && RangeRegistry.isSameFolder(outerFolder, folder, platform);
 
         return isSameFolder && Object.keys(config.ports).every(name => env[name]) ? devPorts(config, env) : undefined;

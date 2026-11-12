@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { type Pool, Pools } from "./pools.ts";
+import { type Pool, Pools } from "../registry/pools.ts";
 import { RangeKill } from "./range-kill.ts";
-import type { RangeEntry } from "./range-registry.ts";
+import type { RangeEntry } from "../registry/range-registry.ts";
 
 const defaultPools = () => Pools.DEFAULT;
 

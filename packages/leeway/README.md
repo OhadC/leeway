@@ -50,13 +50,9 @@ ignores them.
 | `pinned`     | -       | ports every folder shares (see [Pinned ports](#pinned-ports))          |
 | `agentGuard` | `false` | refuse default ports to agent shells (see [Agent guard](#agent-guard)) |
 
-Unknown settings are refused, so a typo fails loudly. So are configs that validate but can't work:
-
-- `LEEWAY_ENV` and `LEEWAY_FOLDER` as port names, in any case for `LEEWAY_FOLDER`: leeway uses them itself.
-- two port names that differ only by case, like `port_web` and `PORT_WEB`, anywhere in `ports` and `pinned`: on Windows they are one
-  environment variable.
-- two catalogue entries with the same `port`: default ports would hand it to both servers. Pinned ports may share one, like `PORT_DB` and
-  `PGPORT` for one Postgres.
+Unknown settings are refused, so a typo fails loudly, and so is a config that can't work, with the reason: `LEEWAY_ENV` or
+`LEEWAY_FOLDER` as a port name, two port names that differ only by case, or two catalogue entries with the same `port`. Pinned ports may
+share one, like `PORT_DB` and `PGPORT` for one Postgres.
 
 ### Pinned ports
 
@@ -70,47 +66,31 @@ Some ports should not move per folder: a local Postgres, or another repo's dev s
 }
 ```
 
-A pinned port keeps its `port` in every folder and every mode, so the config stays the one file of ports and `devPorts` the one call
-that reads them. leeway hands it down like any port, in the environment, `{{PORT_DB}}` and `{{LEEWAY_ENV}}`, and marks it `pinned` in its
-table. It is never part of a range: claims don't count, record or test it, the agent guard ignores it, and `leeway list` and `leeway kill`
-never reach it. A claim refuses a pinned port inside one of the machine's pools, where `leeway kill --orphans` would kill it. A name can't
-be in both `ports` and `pinned`. For a worktree that needs its own copy, move the entry to `ports` there without committing it; its next
-claim grows the range by one.
+A pinned port keeps its `port` in every folder and every mode. leeway hands it down like any port, in the environment, `{{PORT_DB}}` and
+`{{LEEWAY_ENV}}`, and marks it `pinned` in its table. It is never part of a range: the agent guard ignores it, and `leeway list` and
+`leeway kill` never reach it. A pinned port inside one of the machine's pools is refused, since `leeway kill --orphans` would kill it
+there. A name can't be in both `ports` and `pinned`. For a worktree that needs its own copy, move the entry to `ports` there without
+committing it; its next claim grows the range by one.
 
 leeway finds the config by walking up from the current directory; the nearest `leeway.json` wins, and the folder holding it is the
 folder that owns the range. Commit it: every worktree gets its own copy and therefore its own range.
 
-## Ranges and the registry
+## Ranges
 
-A folder's range is claimed from the machine's pools, the default pool 21000-29999 unless the machine's owner set others with
-[`leeway pools`](#leeway-pools-set-start-end--reset), and recorded in the machine-wide registry `~/.leeway/ranges.json`, shared by every
-repo on the machine:
+A folder's range comes from the machine's pools, 21000-29999 unless set otherwise with
+[`leeway pools`](#leeway-pools-set-start-end--reset), and recorded in the registry, `~/.leeway/ranges.json`. Every repo on the machine
+shares both, so no two folders get the same ports.
 
-```json
-{
-    "version": 1,
-    "folders": {
-        "/home/me/app": { "start": 21000, "end": 21001, "ports": { "PORT_WEB": 21000, "PORT_API": 21001 } },
-        "/home/me/app-feature": { "start": 21002, "end": 21003, "ports": { "PORT_WEB": 21002, "PORT_API": 21003 } }
-    }
-}
-```
+- A range is exactly as wide as the catalogue. Adding, reordering or renaming port names moves no port; removing one moves only the ports
+  that fell outside the narrower range.
+- A folder keeps its range while its ports are free (or held by its own servers). Otherwise the range moves to free ports and leeway warns:
+  restart anything still on the old ports.
+- A deleted folder's range is freed by a later claim that needs room; `leeway release` frees a range right away, whether or not its
+  folder still exists.
+- Concurrent `leeway` runs never get the same range. A run that waits over 30 seconds for another fails, naming the lock file to delete
+  if no `leeway` is running.
 
-- A range is exactly as wide as the catalogue. A port name keeps its port while it stays in the catalogue and its port is inside the
-  range; new port names take the ports nobody holds, low to high, in catalogue order. Adding, reordering or renaming port names moves no
-  port, and removing one moves only the port names whose port fell outside the narrower range.
-- A claim keeps the folder's current range whenever it sits inside one pool and its ports are still free (or held by the folder's own
-  running servers). Otherwise it takes the first gap, pools in the order they were set and each pool from low to high, that overlaps no
-  other range and whose ports can all be bound, and warns that the range moved. A range never spans two pools.
-- Ports held by something else, or reserved by the OS, are skipped at claim time.
-- Ranges of folders that no longer exist are dropped the next time a claim has to place a range; `leeway release` releases the range of
-  a folder that still exists.
-- Claims are serialised by a lock next to the registry, so concurrent `leeway` runs never get the same range. A run that can't get the
-  lock within 30 seconds fails, naming the lock to delete if no `leeway` is running.
-- Repos on different leeway versions share the registry: from 0.3 on, no version refuses it, a claim keeps data it doesn't understand,
-  and every readable range holds its ports.
-
-Default ports never touch the registry.
+Default ports never claim a range. Tools that need every range on the machine read [`leeway list --json`](#leeway-list---json).
 
 ## In code: `devPorts`
 
@@ -131,7 +111,7 @@ value that isn't an integer 1-65535 throws, naming the port name and the value. 
 
 With `"agentGuard": true`, `devPorts` throws in an agent shell (`CLAUDECODE`, `GEMINI_CLI`, `CURSOR_AGENT` or `AI_AGENT` set) when none
 of the catalogue's variables are set, so an agent can't silently start a server on your default ports. It is off by default. It is skipped
-under vitest (`VITEST`) and jest (`JEST_WORKER_ID`), because app modules often read ports at import time in tests. Codex sets no
+under vitest (`VITEST`) and jest (`JEST_WORKER_ID`). Codex sets no
 reliable marker, and Copilot and Aider document none, so for them the guard can't fire; tell them to start servers through `leeway` (see
 [Agents](#agents)).
 
@@ -215,8 +195,7 @@ folder still claims its own range, and an explicit `--default` or `--inherit` ke
   argument holding both `"` and a cmd metacharacter like `&` can still break there.
 - The command runs through the system shell (`sh`, `cmd.exe` on Windows).
 - leeway exits with the command's exit code, or 1 if it died from a signal or could not start.
-- Stopping leeway stops the whole command tree. On Linux and macOS the command runs in its own process group and SIGINT, SIGTERM and SIGHUP
-  are forwarded to the group. On Windows, Ctrl+C, Ctrl+Break or closing the console kills the tree with `taskkill /T /F`.
+- Stopping leeway (Ctrl+C, a signal, closing the terminal) stops the whole command tree.
 
 `leeway --help` (or `-h`) prints the usage, `leeway --version` the version.
 
@@ -264,8 +243,7 @@ configuration whose `preLaunchTask` writes the file:
 "envFile": "${workspaceFolder}/.leeway.env"
 ```
 
-The task runs under `cmd.exe` on Windows because Windows PowerShell's `>` writes UTF-16, or UTF-8 with a byte order mark, and
-dotenv readers expect plain text.
+Keep the `cmd.exe` shell on Windows: Windows PowerShell's `>` writes a file dotenv readers can't read.
 
 Use `eval "$(leeway env --export)"` to give a shell its range, after which `devPorts` and tools started without `leeway`
 pick the ports up.
@@ -326,8 +304,7 @@ exactly the ones `leeway list` shows, and leaves living ranges alone.
 ### `leeway release [<folder>]`
 
 Drops this folder's range from the registry, or with a path, that folder's (with or without a `leeway.json`, existing or not), so its
-ports go back to the pools; the folder's next claim places a new range. It takes the claim lock and keeps everything else in the
-registry.
+ports go back to the pools; the folder's next claim places a new range.
 
 ```sh
 $ leeway release ~/old-clone
@@ -341,8 +318,7 @@ written.
 ### `leeway pools [set <start-end>... | reset]`
 
 The machine's pools, the blocks of ports every repo's ranges come from. For machines where 21000-29999 is a poor fit, for example when a
-firewall allows only certain ports or ports are forwarded into a container or VM. Pools apply to leeway 0.3 and later; older versions
-ignore them and keep claiming in 21000-29999.
+firewall allows only certain ports or ports are forwarded into a container or VM.
 
 ```sh
 $ leeway pools
@@ -361,8 +337,8 @@ $ leeway pools reset
 - `leeway pools reset` goes back to the default pool.
 - Neither moves any range. A range outside the new pools keeps holding its ports until its folder claims again, which moves it into a pool
   with the usual warning.
-- The pools are stored as `pools` beside `folders` in `~/.leeway/ranges.json`. A hand edit leeway can't read makes claims and
-  `leeway pools` fail until you fix it, for example with `leeway pools set` or `leeway pools reset`.
+- The pools are stored as `pools` in `~/.leeway/ranges.json`. A hand edit leeway can't read makes claims and `leeway pools` fail
+  until you fix it, for example with `leeway pools set` or `leeway pools reset`.
 
 ## Agents
 
@@ -380,9 +356,6 @@ $ leeway pools reset
     }
 }
 ```
-
-This is why `leeway env --export` prints nothing but plain `export NAME=port` lines on stdout: Claude Code's PowerShell tool honours
-`$CLAUDE_ENV_FILE` only when every line is a plain export, and in Bash a table or a warning there would run as a command.
 
 **Other agents** (Codex, Gemini CLI, Cursor, Copilot, Aider, ...): tell them in `AGENTS.md` to start servers with
 `leeway <command>`. Where the agent sets a marker, turning on the agent guard catches the times it forgets.
@@ -465,18 +438,18 @@ eval "$(npx leeway env --export)"
 - A hard kill of `leeway` itself (SIGKILL, Task Manager, `taskkill /F` on leeway alone) skips its cleanup and can leave the command
   tree running. Recover with `leeway kill` in that folder.
 - On Windows, a command that exits while leaving background grandchildren behind can leave them running too; `leeway kill` again.
-- On Linux and macOS the command runs in its own session (that is how it gets its own process group), so it has no controlling terminal:
+- On Linux and macOS the command runs in its own session, so it has no controlling terminal:
   it still reads keys from stdin, but tools that open `/dev/tty` directly (some password prompts, full-screen TUIs) fail.
 - A port can be taken between the claim and your server binding it. `strictPort` and bind errors make that a loud failure, not a silent
   drift.
 - Pools are never compacted, so they can fragment. When no pool has room, the claim fails with a message naming every pool; release unused
   folders' ranges with `leeway release <folder>`.
+- leeway before 0.3 ignores pools: a repo on an older version still claims in 21000-29999, whatever `leeway pools set` says.
 - There is no `leeway init`: write `leeway.json` by hand.
 - `leeway list` and `leeway kill` scan listeners with `netstat` on Windows, `ss` on Linux and `lsof` on macOS. Without sudo on macOS they see
   only your own processes. Without sudo on Linux they see other users' listeners without a pid: `leeway list` shows `pid ?` (`null` in
   `--json`), and `leeway kill` reports them as failed and exits 1.
-- `leeway kill` recognises a `leeway` run by its command line (`.../leeway/dist/cli.mjs`, or a `bin/leeway` or `.bin/leeway` link to it). A listener whose `leeway` run is gone is
-  killed alone, so a watcher above it can still restart it.
+- A listener whose `leeway` run is gone is killed alone by `leeway kill`, so a watcher above it can still restart it.
 
 ## License
 

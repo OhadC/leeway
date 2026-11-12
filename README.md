@@ -69,10 +69,9 @@ export default defineConfig({ plugins: [leeway({ config, port: "PORT_WEB" })] })
 
 ## What you get
 
-- **Stable ranges**: a folder keeps its range across runs, recorded in a machine-wide registry (`~/.leeway/ranges.json`), so bookmarks
-  and env files keep working.
+- **Stable ranges**: a folder keeps its range across runs, so bookmarks and env files keep working.
 - **No collisions**: ranges come from the machine's pools (21000-29999 unless you set others with `leeway pools set`), never overlap,
-  and skip ports already taken. Concurrent runs are serialised by a lock.
+  and skip ports already taken, even when several `leeway` runs start at once.
 - **Default ports still work**: `leeway --default vite` runs on the ports in `leeway.json`, and code reading `devPorts` outside `leeway` gets
   them too.
 - **Placeholders**: `leeway curl http://localhost:{{PORT_API}}` puts the port in the command.
@@ -85,26 +84,8 @@ export default defineConfig({ plugins: [leeway({ config, port: "PORT_WEB" })] })
 
 ## Docs
 
-The full reference is in [packages/leeway/README.md](packages/leeway/README.md): config, how claims work, the vite plugin, every CLI
-command and mode, agent setup, recipes and known limits. Design decisions are in [docs/adr](docs/adr), terms in [GLOSSARY.md](GLOSSARY.md).
-
-## Repo layout
-
-- [packages/leeway](packages/leeway): the library and CLI, published to npm as [`leeway`](https://www.npmjs.com/package/leeway)
-- [examples/playground](examples/playground): a vite app and an api server wired through leeway, for trying it by hand
-
-## Development
-
-```sh
-pnpm install
-pnpm verify        # typecheck + lint + tests, once
-pnpm test          # vitest in watch mode
-pnpm test:linux    # the same suite in a Linux container (podman)
-pnpm test:package  # build, pack and install the package, then use it as a consumer would
-pnpm build
-```
-
-Formatting runs on commit through a pre-commit hook; CI checks it.
+The full reference is in [packages/leeway/README.md](packages/leeway/README.md): config, the vite plugin, every CLI command and mode,
+agent setup, recipes and known limits. To work on leeway, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

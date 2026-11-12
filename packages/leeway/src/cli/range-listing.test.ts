@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { type Pool, Pools } from "./pools.ts";
-import type { ProcessRow } from "./process-tree.ts";
-import type { RangeEntry } from "./range-registry.ts";
+import { type Pool, Pools } from "../registry/pools.ts";
+import type { ProcessRow } from "../os/process-tree.ts";
+import type { RangeEntry } from "../registry/range-registry.ts";
 import { RangeListing } from "./range-listing.ts";
 
 const noProcessRows = (): ProcessRow[] => [];

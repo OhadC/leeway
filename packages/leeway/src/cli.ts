@@ -3,15 +3,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { ConfigFile, type FoundConfig } from "./config-file.ts";
 import { devPorts } from "./dev-ports.ts";
-import { ExecCommand, type ExecMode, type ExecRequest } from "./exec-command.ts";
-import { FolderRange } from "./folder-range.ts";
-import { ListenerScan, type PortListener } from "./listener-scan.ts";
-import { Pools } from "./pools.ts";
-import { ProcessTree } from "./process-tree.ts";
-import { type KillPlan, RangeKill } from "./range-kill.ts";
-import { RangeListing } from "./range-listing.ts";
-import { type RangeEntry, RangeRegistry } from "./range-registry.ts";
-import { RunWithPorts } from "./run-with-ports.ts";
+import { ExecCommand, type ExecMode, type ExecRequest } from "./cli/exec-command.ts";
+import { FolderRange } from "./registry/folder-range.ts";
+import { ListenerScan, type PortListener } from "./os/listener-scan.ts";
+import { Pools } from "./registry/pools.ts";
+import { ProcessTree } from "./os/process-tree.ts";
+import { type KillPlan, RangeKill } from "./cli/range-kill.ts";
+import { RangeListing } from "./cli/range-listing.ts";
+import { type RangeEntry, RangeRegistry } from "./registry/range-registry.ts";
+import { RunWithPorts } from "./os/run-with-ports.ts";
 
 const USAGE = [
     "usage: leeway [--default | --inherit] [--] <command>   run <command> with this folder's range as env vars; {{NAME}} in <command> becomes its port, {{LEEWAY_ENV}} every port as JSON",
@@ -78,7 +78,7 @@ async function execWithPorts(found: FoundConfig, { mode, command }: ExecRequest)
 
     const ports = await portsOfMode(found, mode);
 
-    RunWithPorts.runAndExit(ExecCommand.commandLine(command, ports), { ...ports, [FolderRange.FOLDER_VARIABLE]: found.folder });
+    RunWithPorts.runAndExit(ExecCommand.commandLine(command, ports), { ...ports, [ConfigFile.FOLDER_VARIABLE]: found.folder });
 }
 
 async function portsOfMode(found: FoundConfig, mode: ExecMode): Promise<Record<string, number>> {
