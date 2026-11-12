@@ -34,6 +34,8 @@ const LOCK_RETRY_MS = 50;
 
 const LOCK_STALE_MS = 10_000;
 
+const LOCK_WAIT_MS = 30_000;
+
 const LOCK_BUSY_CODES = new Set(["EEXIST", "ENOTEMPTY", "EPERM", "EACCES", "EBUSY"]);
 
 const BIND_HOSTS = ["127.0.0.1", "::1", "0.0.0.0", "::"];
@@ -211,6 +213,7 @@ export class RangeRegistry {
     private static async acquireLock(lockPath: string, now: ClaimRangeOptions["now"]): Promise<string> {
         const owner = randomUUID();
         const proposal = `${lockPath}.${owner}`;
+        const waitStart = now();
 
         fs.mkdirSync(proposal, { recursive: true });
 
@@ -227,7 +230,15 @@ export class RangeRegistry {
                     }
                 }
 
-                RangeRegistry.breakStaleLock(lockPath, now());
+                const checkedAt = now();
+
+                if (checkedAt - waitStart >= LOCK_WAIT_MS) {
+                    throw new Error(
+                        `leeway: gave up after ${LOCK_WAIT_MS / 1000} seconds waiting for the lock ${lockPath}; if no leeway is running, delete it`,
+                    );
+                }
+
+                RangeRegistry.breakStaleLock(lockPath, checkedAt);
                 await new Promise(resolve => setTimeout(resolve, LOCK_RETRY_MS));
             }
         } finally {

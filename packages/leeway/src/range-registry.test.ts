@@ -739,6 +739,24 @@ describe("RangeRegistry.claim lock", () => {
         expect(entry).toEqual({ folder: "/repo", start: 21000, end: 21000, ports: { PORT_A: 21000 } });
     });
 
+    it("gives up after thirty seconds on a lock it can not break, naming the lock, and leaves the registry untouched", async () => {
+        const registryPath = createRegistryPath({
+            version: 1,
+            folders: { "/other": { start: 21000, end: 21000, ports: { PORT_A: 21000 } } },
+        });
+        const before = fs.readFileSync(registryPath, "utf8");
+        const lockPath = `${registryPath}.lock`;
+        fs.mkdirSync(path.join(lockPath, "sub"), { recursive: true });
+        let clock = Date.now();
+
+        const claiming = claim(registryPath, "/repo", ["PORT_A"], { now: () => (clock += 11_000) });
+
+        await expect(claiming).rejects.toThrow(
+            `leeway: gave up after 30 seconds waiting for the lock ${lockPath}; if no leeway is running, delete it`,
+        );
+        expect(fs.readFileSync(registryPath, "utf8")).toBe(before);
+    });
+
     it("does not let a claim whose stale lock was broken release the lock of the claim that broke it", async () => {
         const registryPath = createRegistryPath();
         const slow = heldClaim(registryPath, "/slow");
