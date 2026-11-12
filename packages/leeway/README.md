@@ -205,7 +205,7 @@ folder still claims its own range, and an explicit `--default` or `--inherit` ke
 
 - `{{NAME}}` anywhere in the command becomes that port. A `{{NAME}}` that is not in the catalogue fails before anything is claimed or run.
 - `{{LEEWAY_ENV}}` becomes every catalogue port as JSON, `{"PORT_WEB":21000,"PORT_API":21001}`, so `LEEWAY_ENV` can't be a port name.
-  It needs the command as several arguments, which leeway quotes; in a one-argument shell line it fails.
+  It needs the command as several arguments, which leeway quotes; in a one-argument shell line it fails before anything is claimed or run.
 - `env`, `list`, `kill`, `release` and `pools` are leeway's own commands, and a flag before the command is leeway's: an unknown one fails with the usage. To
   run a command with one of those names, or starting with `-`, put `--` first: `leeway -- kill ...`.
 - One argument is a shell line, run as-is: `leeway "vite build && vite preview"`. Several arguments are an argv: each is quoted for the

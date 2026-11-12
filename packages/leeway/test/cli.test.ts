@@ -403,6 +403,21 @@ describe("leeway errors", () => {
         expect(LeewayCli.claimedFolders(home)).toEqual([]);
     });
 
+    it("fails on {{LEEWAY_ENV}} in a one-argument shell line in every mode, before printing ports or claiming", () => {
+        const { dir, home } = temporaryFolder();
+
+        for (const mode of [[], ["--default"], ["--inherit"]]) {
+            const result = LeewayCli.run([...mode, "echo {{LEEWAY_ENV}}"], dir, home);
+
+            expect(result.status).toBe(1);
+            expect(result.stdout).toBe("");
+            expect(result.stderr).toBe(
+                "leeway: {{LEEWAY_ENV}} needs the command as several arguments, not one shell line, so leeway can quote it\n",
+            );
+        }
+        expect(LeewayCli.claimedFolders(home)).toEqual([]);
+    });
+
     it("--inherit gives an agent shell without ports the default ports, unless the config turns the agent guard on", () => {
         const { dir, home } = temporaryFolder();
         const inherit = ["--inherit", "node", "-e", PRINT_PORTS, "{{PORT_WEB}}"];
