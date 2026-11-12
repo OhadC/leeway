@@ -86,12 +86,13 @@ describe("leeway vite plugin in a dev server", () => {
     it.each([
         ["port", { port: "PORT_WBE" }],
         ["preview port", { port: "PORT_WEB", preview: "PORT_WBE" }],
-    ])("refuses an unknown %s, naming it and the known ones", async (_, names) => {
+    ])("refuses an unknown %s, naming it and the port names, pinned ones too", async (_, names) => {
         const folder = tempFolder();
-        fs.writeFileSync(path.join(folder, "leeway.json"), JSON.stringify(catalogue({ PORT_WEB: 5173, PORT_API: 3001 })));
+        const config = { ...catalogue({ PORT_WEB: 5173, PORT_API: 3001 }), pinned: { PORT_DB: { port: 5432 } } };
+        fs.writeFileSync(path.join(folder, "leeway.json"), JSON.stringify(config));
 
         await expect(createServer(inlineConfig({ root: folder, plugins: [leeway(names)] }))).rejects.toThrowError(
-            "leeway: PORT_WBE is not in the catalogue (PORT_WEB, PORT_API)",
+            "leeway: unknown port name PORT_WBE; the config has PORT_WEB, PORT_API, PORT_DB",
         );
     });
 });

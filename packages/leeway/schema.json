@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "leeway.json",
-    "description": "The leeway config: the catalogue of ports this repo's dev setup uses, plus the settings that apply to it.",
+    "description": "The leeway config: the catalogue of ports this repo's dev setup uses and its pinned ports, plus the settings that apply to it.",
     "type": "object",
     "required": ["ports"],
     "additionalProperties": false,
@@ -49,7 +49,7 @@
             "required": ["port"],
             "properties": {
                 "port": {
-                    "description": "The default port: the port this entry uses when no range applies.",
+                    "description": "For a catalogue entry, the default port: the port it uses when no range applies. For a pinned port, the port every folder uses.",
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 65535

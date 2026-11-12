@@ -146,13 +146,13 @@ The plugin:
 - sets `server.port` and `preview.port` from `devPorts`, with `strictPort: true`, so a taken port fails loudly instead of drifting to
   port+1. `vite preview` uses the `port` name too; name another with `preview` for an app that runs its preview beside its dev server
   (`leeway({ config, port: "PORT_WEB", preview: "PORT_PREVIEW" })`);
-- on `vite serve`, defines `LEEWAY_ENV` with every catalogue port, so `devPorts(config)` in browser code sees the same ports as the
+- on `vite serve`, defines `LEEWAY_ENV` with every catalogue and pinned port, so `devPorts(config)` in browser code sees the same ports as the
   server. Builds keep default ports unless you pass `alwaysInject: true`.
 
 ## Other bundlers
 
-A bundler with a define option gets the same browser ports from the `{{LEEWAY_ENV}}` placeholder, which becomes every catalogue port as
-JSON. Angular CLI, for example:
+A bundler with a define option gets the same browser ports from the `{{LEEWAY_ENV}}` placeholder, which becomes every catalogue and
+pinned port as JSON. Angular CLI, for example:
 
 ```json
 {
@@ -166,7 +166,7 @@ JSON. Angular CLI, for example:
 
 ### `leeway [--default | --inherit] [--] <command>`
 
-Runs `<command>` with every catalogue port in its environment.
+Runs `<command>` with every catalogue and pinned port in its environment.
 
 | mode        | ports                                                                                 |
 | ----------- | ------------------------------------------------------------------------------------- |
@@ -193,16 +193,17 @@ folder still claims its own range, and an explicit `--default` or `--inherit` ke
 }
 ```
 
-- `{{NAME}}` anywhere in the command becomes that port. A `{{NAME}}` that is not in the catalogue fails before anything is claimed or run.
-- `{{LEEWAY_ENV}}` becomes every catalogue port as JSON, `{"PORT_WEB":21000,"PORT_API":21001}`, so `LEEWAY_ENV` can't be a port name.
+- `{{NAME}}` anywhere in the command becomes that port. A `{{NAME}}` that is not a port name fails before anything is claimed or run.
+- `{{LEEWAY_ENV}}` becomes every catalogue and pinned port as JSON, `{"PORT_WEB":21000,"PORT_API":21001}`, so `LEEWAY_ENV` can't be a port name.
   It needs the command as several arguments, which leeway quotes; in a one-argument shell line it fails before anything is claimed or run.
-- `env`, `list`, `kill`, `release` and `pools` are leeway's own commands, and a flag before the command is leeway's: an unknown one fails with the usage. To
+- `env`, `list`, `kill`, `move`, `release` and `pools` are leeway's own commands, and a flag before the command is leeway's: an unknown one fails with the usage. To
   run a command with one of those names, or starting with `-`, put `--` first: `leeway -- kill ...`.
 - One argument is a shell line, run as-is: `leeway "vite build && vite preview"`. Several arguments are an argv: each is quoted for the
   shell when needed, so `leeway node -e "console.log(1)"` runs exactly that. On Windows a `.cmd` shim re-parses its arguments, so an
   argument holding both `"` and a cmd metacharacter like `&` can still break there.
 - The command runs through the system shell (`sh`, `cmd.exe` on Windows).
-- leeway exits with the command's exit code, or 1 if it died from a signal or could not start.
+- leeway exits with the shell's exit code (a missing command: 127 from `sh`, 1 from `cmd.exe`; a command killed by a signal: usually
+  128 plus the signal number from `sh`), or 1 if the shell itself died from a signal or could not start.
 - Stopping leeway (Ctrl+C, a signal, closing the terminal) stops the whole command tree.
 
 `leeway --help` (or `-h`) prints the usage, `leeway --version` the version.
@@ -355,8 +356,8 @@ $ leeway pools reset
 - `leeway pools reset` goes back to the default pool.
 - Neither moves any range. A range outside the new pools keeps holding its ports until its folder claims again, which moves it into a pool
   with the usual warning.
-- The pools are stored as `pools` in `~/.leeway/ranges.json`. A hand edit leeway can't read makes claims and `leeway pools` fail
-  until you fix it, for example with `leeway pools set` or `leeway pools reset`.
+- The pools are stored as `pools` in `~/.leeway/ranges.json`. A hand edit leeway can't read fails claims, `leeway list`, `leeway release`,
+  printing the pools, and `leeway kill` with `--orphans` or a port outside every range, until you fix it, for example with `leeway pools set` or `leeway pools reset`.
 
 **WSL beside Windows**: each side has its own `~/.leeway/ranges.json`, while WSL forwards its ports to Windows `localhost`. Both
 start from the default pool and can claim the same range; give each side its own pools, for example `leeway pools set 21000-24999` on

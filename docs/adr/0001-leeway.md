@@ -58,6 +58,7 @@ test. When none fits, the claim fails naming every pool. Inside the range, a por
 inside the range and no earlier port name in the catalogue kept it; the other port names take the remaining ports low to high, in
 catalogue order. So adding, reordering or renaming port names moves no port, and a moved range that overlaps its old one keeps what it
 can. When the range moves, the CLI warns on stderr; when it stays put but a port name's port changes, the CLI warns naming that port name.
+`leeway release` drops a folder's range from the registry right away, whether or not the folder still exists.
 
 **Port test.** It binds `127.0.0.1`, `::1`, `0.0.0.0` and `::`, because on Windows a wildcard bind succeeds while something listens on a
 loopback address (vite on `::1`). A missing address family is skipped. The result is free, in-use or unavailable (reserved, access
@@ -69,7 +70,7 @@ the fixes; a move takes a range sharing no port with the old one, so the folder'
 **Lock and writes.** The lock is a directory next to the registry holding one file named by its holder's random token, taken by renaming a
 prepared directory into place so it is never seen empty while held. Waiters retry; a token older than ten seconds is deleted so a crash
 never blocks later claims, and the directory is only removed while empty, so breaking a stale lock or a late release never removes another
-claim's lock. The registry is written atomically (temp file, rename).
+claim's lock. A claim that waits over 30 seconds on a lock it cannot break fails, naming the lock. The registry is written atomically (temp file, rename).
 
 **Unknown data.** The registry is forward-compatible, as [0002](0002-forward-compatible-registry.md) records: no leeway refuses it
 because of its `version`, every write keeps data it doesn't understand, and every readable range holds its ports. One that isn't a
@@ -86,7 +87,7 @@ that same folder runs on the ports it was handed, silently, so composed scripts 
 an explicit `--default` or `--inherit` keeps its meaning, a call for another folder claims its own range, and an environment that lacks
 `LEEWAY_FOLDER` or one of the catalogue's ports is claimed as before. `leeway env --export` sets no `LEEWAY_FOLDER`: an agent session's exported range
 is re-checked by the next claim.
-`env`, `list`, `kill` and `pools` are reserved; `--` runs a command of that name. `{{NAME}}` in the command becomes the port, for tools that take a
+`env`, `list`, `kill`, `move`, `release` and `pools` are reserved; `--` runs a command of that name. `{{NAME}}` in the command becomes the port, for tools that take a
 port only as an argument. `{{LEEWAY_ENV}}` becomes every port as JSON, for bundlers without a leeway plugin to define the
 browser's `LEEWAY_ENV` (`--define LEEWAY_ENV={{LEEWAY_ENV}}`); one name for both, so `LEEWAY_ENV` can't be a port name. JSON needs quoting, so it works only in several arguments, which leeway quotes; a one-argument
 shell line with it fails rather than lose its quotes.
@@ -113,8 +114,8 @@ can't fire.
 
 **Listing and killing scan the OS.** `leeway list` shows every range from every repo with the pid on each port, plus orphans: listeners in any pool
 outside every living range. A registry-only listing can't tell a running server from a dead registration, which is most of the question.
-`leeway kill [<port>]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in any
-pool, just the listeners on it; a port outside every range and every pool is refused. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
+`leeway kill [<port> | --orphans]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in
+any pool, just the listeners on it, and with `--orphans` every orphan's listeners that way; a port outside every range and every pool is refused. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
 above it and that run's tree, found by walking parent pids in a fresh process table and recognising the run by its command line
 (`leeway/dist/cli.mjs`). Killing only the listener left watchers (`tsx watch`) alive to restart it on the next file change. An orphan's run
 is spared: it can be a moved range's old server under a run that also serves the current range. Recording each run's pid in the registry was
