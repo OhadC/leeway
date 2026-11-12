@@ -43,8 +43,21 @@ export class FolderRange {
     }
 
     static movedWarning({ entry, previous }: RangeClaim): string | undefined {
-        return previous && previous.start !== entry.start
-            ? `leeway: range moved from ${previous.start}-${previous.end} to ${entry.start}-${entry.end}; restart anything still using the old ports\n`
-            : undefined;
+        if (!previous) {
+            return undefined;
+        }
+
+        if (previous.start !== entry.start) {
+            return `leeway: range moved from ${previous.start}-${previous.end} to ${entry.start}-${entry.end}; restart anything still using the old ports\n`;
+        }
+
+        const lines = Object.entries(entry.ports)
+            .filter(([name, port]) => Object.hasOwn(previous.ports, name) && previous.ports[name] !== port)
+            .map(
+                ([name, port]) =>
+                    `leeway: ${name} moved from ${previous.ports[name]} to ${port}; restart anything still using the old port\n`,
+            );
+
+        return lines.length > 0 ? lines.join("") : undefined;
     }
 }

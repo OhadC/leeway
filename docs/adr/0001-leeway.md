@@ -54,7 +54,10 @@ pool ([0002](0002-forward-compatible-registry.md)).
 pass the port test, without checking which folders still exist. Otherwise it drops entries whose folder is gone, tries the folder's
 current start first, so a grown catalogue stays put when the next ports are free, then each pool's gaps from low to high, pools in the
 order they were set. It takes the first candidate that sits inside one pool, overlaps no living entry and whose ports all pass the port
-test. When none fits, the claim fails naming every pool. When the range moves, the CLI warns on stderr.
+test. When none fits, the claim fails naming every pool. Inside the range, a port name keeps its previous port when that port is still
+inside the range and no earlier port name in the catalogue kept it; the other port names take the remaining ports low to high, in
+catalogue order. So adding, reordering or renaming port names moves no port, and a moved range that overlaps its old one keeps what it
+can. When the range moves, the CLI warns on stderr; when it stays put but a port name's port changes, the CLI warns naming that port name.
 
 **Port test.** It binds `127.0.0.1`, `::1`, `0.0.0.0` and `::`, because on Windows a wildcard bind succeeds while something listens on a
 loopback address (vite on `::1`). A missing address family is skipped. The result is free, in-use or unavailable (reserved, access
