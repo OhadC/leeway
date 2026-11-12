@@ -71,7 +71,8 @@ export default defineConfig({ plugins: [leeway({ config, port: "PORT_WEB" })] })
 
 - **Stable ranges**: a folder keeps its range across runs, so bookmarks and env files keep working.
 - **No collisions**: ranges come from the machine's pools (21000-29999 unless you set others with `leeway pools set`), never overlap,
-  and skip ports already taken, even when several `leeway` runs start at once.
+  and skip ports already taken, even when several `leeway` runs start at once. When something else takes one of a folder's ports later,
+  `leeway` names it and `leeway move` gives the folder a new range.
 - **Default ports still work**: `leeway --default vite` runs on the ports in `leeway.json`, and code reading `devPorts` outside `leeway` gets
   them too.
 - **Placeholders**: `leeway curl http://localhost:{{PORT_API}}` puts the port in the command.

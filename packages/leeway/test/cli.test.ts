@@ -1,4 +1,4 @@
-import { type ChildProcess, spawnSync } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -161,6 +161,95 @@ describe("leeway env", () => {
 
         expect(result.stdout).toBe("PORT_WEB=24000\nPORT_API=24001\n");
         expect(LeewayCli.claimedFolders(home)).toEqual([]);
+    });
+
+    it("names a squatter on a port of the range, which leeway did not start, with kill and move as fixes, and keeps the range", async () => {
+        const { dir, home } = temporaryFolder();
+
+        const claimed = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
+        const squatter = startSquatter(claimed.PORT_API!);
+        await listeningPort(squatter);
+        const result = LeewayCli.run(["env", "--export"], dir, home);
+
+        expect(result.status).toBe(0);
+        expect(LeewayCli.exportedPorts(result.stdout)).toEqual(claimed);
+        expect(result.stderr).toMatch(
+            new RegExp(
+                `\\n  PORT_API  ${claimed.PORT_API}\\nleeway: ${claimed.PORT_API} \\(PORT_API\\) is in use by pid ${squatter.pid} \\(.*node.*\\), ` +
+                    "which leeway did not start; if it's this folder's, leeway kill; if not, leeway move\\n$",
+            ),
+        );
+    });
+
+    it("names a server a leeway run started on a port of the range, with kill as the fix", async () => {
+        const { dir, home } = temporaryFolder();
+
+        const port = await listeningPort(startLeeway(["node", "-e", SERVER], dir, home));
+        const result = LeewayCli.run(["env"], dir, home);
+
+        expect(result.status).toBe(0);
+        expect(result.stderr).toMatch(
+            new RegExp(
+                `\\nleeway: ${port} \\(PORT_WEB\\) is in use by pid \\d+ \\(.*node.*\\), ` +
+                    "started by leeway; if it shouldn't still be running, stop it with leeway kill\\n$",
+            ),
+        );
+    });
+
+    it("names nothing for a pinned port or a default port in use", async () => {
+        const { dir, home } = temporaryFolder();
+        const port = await listeningPort(startSquatter());
+        fs.writeFileSync(
+            path.join(dir, "leeway.json"),
+            JSON.stringify({ ports: { PORT_WEB: { port }, PORT_API: { port: 3001 } }, pinned: { PORT_DB: { port } } }),
+        );
+
+        const claimed = LeewayCli.run(["env"], dir, home);
+        const defaults = LeewayCli.run(["--default", "node", "-e", ""], dir, home);
+
+        expect(claimed.stdout).toContain(`PORT_DB=${port}
+`);
+        expect(claimed.stderr).not.toContain("in use");
+        expect(defaults.stderr).toContain(`PORT_WEB  ${port}
+`);
+        expect(defaults.stderr).not.toContain("in use");
+    });
+
+    it("names nothing when every port of the range is free", () => {
+        const { dir, home } = temporaryFolder();
+
+        LeewayCli.run(["env"], dir, home);
+
+        expect(LeewayCli.run(["env"], dir, home).stderr).not.toContain("in use");
+    });
+});
+
+describe("leeway move", () => {
+    it("claims a range sharing no port with the old one, prints it with the moved warning on stderr, and the next claim keeps it", () => {
+        const { dir, home } = temporaryFolder();
+
+        const old = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
+        const moved = LeewayCli.run(["move"], dir, home);
+        const next = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], dir, home).stdout);
+
+        expect(moved.status).toBe(0);
+        expect(moved.stdout).toBe("");
+        expect(next.PORT_WEB).toBeGreaterThan(old.PORT_API!);
+        expect(moved.stderr).toBe(
+            `leeway: ports ${next.PORT_WEB}-${next.PORT_API} for ${dir}\n  PORT_WEB  ${next.PORT_WEB}\n  PORT_API  ${next.PORT_API}\n` +
+                `leeway: range moved from ${old.PORT_WEB}-${old.PORT_API} to ${next.PORT_WEB}-${next.PORT_API}; restart anything still using the old ports\n`,
+        );
+    });
+
+    it("claims a plain range for a folder with none, without the moved warning", () => {
+        const { dir, home, pool } = temporaryFolder();
+
+        const moved = LeewayCli.run(["move"], dir, home);
+
+        expect(moved.status).toBe(0);
+        expect(moved.stderr).toBe(
+            `leeway: ports ${pool.start}-${pool.start + 1} for ${dir}\n  PORT_WEB  ${pool.start}\n  PORT_API  ${pool.start + 1}\n`,
+        );
     });
 });
 
@@ -383,6 +472,7 @@ describe("leeway errors", () => {
             ["kill", "web"],
             ["pools", "clear"],
             ["pools", "reset", "now"],
+            ["move", "now"],
             ["release", "a", "b"],
             ["release", "--json"],
         ].forEach(args => {
@@ -402,6 +492,7 @@ describe("leeway errors", () => {
 
             expect(result.status).toBe(0);
             expect(result.stdout).toMatch(/^usage: leeway \[--default \| --inherit\]/);
+            expect(result.stdout).toContain("leeway move ");
         });
         expect(LeewayCli.run(["--version"], dir, home).stdout).toBe(`${version}\n`);
         expect(LeewayCli.claimedFolders(home)).toEqual([]);
@@ -516,6 +607,16 @@ function temporaryFolder() {
     Object.entries(FIXTURES).forEach(([name, source]) => fs.writeFileSync(path.join(folder.dir, name), source));
 
     return folder;
+}
+
+function startSquatter(port = 0): ChildProcess {
+    const server =
+        "const s = require('node:http').createServer().listen(Number(process.argv[1]), () => console.log('listening ' + s.address().port))";
+    const squatter = spawn(process.execPath, ["-e", server, String(port)], { stdio: ["ignore", "pipe", "pipe"] });
+
+    runningLeeways.push(squatter);
+
+    return squatter;
 }
 
 function startLeeway(args: string[], cwd: string, home: string): ChildProcess {

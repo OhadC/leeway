@@ -15,6 +15,7 @@ export type RangeEntry = {
 export type RangeClaim = {
     entry: RangeEntry;
     previous: RangeEntry | undefined;
+    inUse: Record<string, number>;
 };
 
 export type PortBindState = "free" | "in-use" | "unavailable";
@@ -24,6 +25,7 @@ export type ClaimRangeOptions = {
     folder: string;
     names: readonly string[];
     pinned?: Record<string, number>;
+    move?: boolean;
     platform: NodeJS.Platform;
     pathExists: (candidate: string) => boolean;
     testPort: (port: number) => Promise<PortBindState>;
@@ -134,10 +136,21 @@ export class RangeRegistry {
         folder: folderPath,
         names,
         pinned = {},
+        move = false,
         platform,
         pathExists,
         testPort,
     }: ClaimRangeOptions): Promise<RangeClaim> {
+        const portsInUse = new Set<number>();
+        const testAndRecordPort = async (port: number) => {
+            const state = await testPort(port);
+
+            if (state === "in-use") {
+                portsInUse.add(port);
+            }
+
+            return state;
+        };
         const folder = RangeRegistry.folderKey(folderPath, platform);
         const registry = RangeRegistry.read(registryPath);
         const pools = RangeRegistry.poolsOf(registry, registryPath);
@@ -150,9 +163,12 @@ export class RangeRegistry {
         const [current] = RangeRegistry.readableRanges(own);
         const ownKeys = Object.fromEntries(own.flatMap(([, value]) => (isObject(value) ? Object.entries(value) : [])));
         const others = entries.filter(pair => !isOwn(pair));
-        const kept = current && (await RangeRegistry.keep(current, names, RangeRegistry.readableRanges(others), pools, testPort));
+        const keepable = move ? undefined : current;
+        const kept =
+            keepable && (await RangeRegistry.keep(keepable, names, RangeRegistry.readableRanges(others), pools, testAndRecordPort));
         const living = kept ? others : others.filter(([key]) => pathExists(key));
-        const range = kept ?? (await RangeRegistry.place(current, RangeRegistry.readableRanges(living), names, pools, testPort));
+        const occupied = [...RangeRegistry.readableRanges(living), ...(move && current ? [current] : [])];
+        const range = kept ?? (await RangeRegistry.place(keepable, occupied, names, pools, testAndRecordPort));
 
         if (!range) {
             throw new Error(
@@ -165,7 +181,11 @@ export class RangeRegistry {
             folders: { ...Object.fromEntries(living), [folder]: { ...ownKeys, ...range } },
         });
 
-        return { entry: { folder, ...range }, previous: current && { folder, ...current } };
+        return {
+            entry: { folder, ...range },
+            previous: current && { folder, ...current },
+            inUse: Object.fromEntries(Object.entries(range.ports).filter(([, port]) => portsInUse.has(port))),
+        };
     }
 
     private static refusePinnedInPools(pinned: Record<string, number>, pools: Pool[]): void {
