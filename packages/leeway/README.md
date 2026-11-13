@@ -1,7 +1,7 @@
 <h1>
     <picture>
         <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/OhadC/leeway/main/docs/logo/lockup-dark.svg" />
-        <img alt="leeway" src="https://raw.githubusercontent.com/OhadC/leeway/main/docs/logo/lockup.svg" height="56" />
+        <img alt="leeway" src="https://raw.githubusercontent.com/OhadC/leeway/main/docs/logo/lockup.svg" height="64" />
     </picture>
 </h1>
 
