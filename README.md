@@ -1,4 +1,9 @@
-# leeway
+<h1>
+    <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/logo/lockup-dark.svg" />
+        <img alt="leeway" src="docs/logo/lockup.svg" height="56" />
+    </picture>
+</h1>
 
 [![npm](https://img.shields.io/npm/v/leeway)](https://www.npmjs.com/package/leeway)
 [![ci](https://github.com/OhadC/leeway/actions/workflows/ci.yml/badge.svg)](https://github.com/OhadC/leeway/actions/workflows/ci.yml)
