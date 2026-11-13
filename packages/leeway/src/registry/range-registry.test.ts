@@ -858,9 +858,13 @@ describe("RangeRegistry.claim lock", () => {
 
     it("breaks a lock older than about ten seconds, left by a crashed claim", async () => {
         const registryPath = createRegistryPath();
-        await heldClaim(registryPath, "/crashed").locked;
+        const crashedToken = path.join(`${registryPath}.lock`, "crashed");
+        fs.mkdirSync(path.dirname(crashedToken), { recursive: true });
+        fs.writeFileSync(crashedToken, "");
+        const crashedAt = new Date(Date.now() - 11_000);
+        fs.utimesSync(crashedToken, crashedAt, crashedAt);
 
-        const { entry } = await claim(registryPath, "/repo", ["PORT_A"], { now: () => Date.now() + 11_000 });
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A"]);
 
         expect(entry).toEqual({ folder: "/repo", start: 21000, end: 21000, ports: { PORT_A: 21000 } });
     });
@@ -883,22 +887,47 @@ describe("RangeRegistry.claim lock", () => {
         expect(fs.readFileSync(registryPath, "utf8")).toBe(before);
     });
 
-    it("does not let a claim whose stale lock was broken release the lock of the claim that broke it", async () => {
+    it("keeps the lock of a claim that holds it for more than ten seconds", async () => {
+        const registryPath = createRegistryPath();
+        let clock = Date.now();
+        const now = () => clock;
+        const holder = heldClaim(registryPath, "/holder", { now });
+        await holder.locked;
+
+        clock += 11_000;
+        await pause(3_000);
+        const waiter = settledFlag(claim(registryPath, "/repo", ["PORT_A"], { now }));
+        await pause(200);
+        const whileHeld = waiter.settled();
+        holder.finish();
+        await Promise.all([holder.claimed, waiter.claimed]);
+
+        expect(whileHeld).toBe(false);
+        expect(readRegistry(registryPath).folders).toEqual({
+            "/holder": { start: 21000, end: 21000, ports: { PORT_A: 21000 } },
+            "/repo": { start: 21001, end: 21001, ports: { PORT_A: 21001 } },
+        });
+    });
+
+    it("redoes a claim that lost its lock while it worked, after the claim that broke it finishes", async () => {
         const registryPath = createRegistryPath();
         const slow = heldClaim(registryPath, "/slow");
         await slow.locked;
         const breaker = heldClaim(registryPath, "/breaker", { now: () => Date.now() + 11_000 });
         await breaker.locked;
+        const slowClaim = settledFlag(slow.claimed);
 
         slow.finish();
-        await slow.claimed;
-        const waiter = settledFlag(claim(registryPath, "/repo", ["PORT_A"]));
         await pause(200);
-        const whileBreakerHolds = waiter.settled();
+        const whileBreakerHolds = slowClaim.settled();
         breaker.finish();
+        await Promise.all([slowClaim.claimed, breaker.claimed]);
 
         expect(whileBreakerHolds).toBe(false);
-        await waiter.claimed;
+        expect(readRegistry(registryPath).folders).toEqual({
+            "/breaker": { start: 21000, end: 21000, ports: { PORT_A: 21000 } },
+            "/slow": { start: 21001, end: 21001, ports: { PORT_A: 21001 } },
+        });
     });
 
     it("releases the lock after a successful claim, so the next claim does not wait", async () => {

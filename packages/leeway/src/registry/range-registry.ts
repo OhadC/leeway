@@ -38,6 +38,8 @@ const LOCK_STALE_MS = 10_000;
 
 const LOCK_WAIT_MS = 30_000;
 
+const LOCK_REFRESH_MS = 2_000;
+
 const LOCK_BUSY_CODES = new Set(["EEXIST", "ENOTEMPTY", "EPERM", "EACCES", "EBUSY"]);
 
 const BIND_HOSTS = ["127.0.0.1", "::1", "0.0.0.0", "::"];
@@ -51,6 +53,8 @@ type RegistryFile = {
     folders: Record<string, unknown>;
 };
 
+type RegistryWrite = (registry: RegistryFile) => void;
+
 export class RangeRegistry {
     private static readonly VERSION = 1;
 
@@ -59,7 +63,7 @@ export class RangeRegistry {
     }
 
     static claim(options: ClaimRangeOptions): Promise<RangeClaim> {
-        return RangeRegistry.whileLocked(options.registryPath, options.now, () => RangeRegistry.claimLocked(options));
+        return RangeRegistry.whileLocked(options.registryPath, options.now, write => RangeRegistry.claimLocked(options, write));
     }
 
     static pools(registryPath = RangeRegistry.defaultPath(os.homedir())): Pool[] {
@@ -69,17 +73,15 @@ export class RangeRegistry {
     static async setPools(texts: readonly string[], registryPath = RangeRegistry.defaultPath(os.homedir())): Promise<void> {
         const pools = Pools.ofTexts(texts);
 
-        await RangeRegistry.whileLocked(registryPath, Date.now, () =>
-            RangeRegistry.write(registryPath, { ...RangeRegistry.read(registryPath), pools }),
-        );
+        await RangeRegistry.whileLocked(registryPath, Date.now, write => write({ ...RangeRegistry.read(registryPath), pools }));
     }
 
     static async resetPools(registryPath = RangeRegistry.defaultPath(os.homedir())): Promise<void> {
-        await RangeRegistry.whileLocked(registryPath, Date.now, () => {
+        await RangeRegistry.whileLocked(registryPath, Date.now, write => {
             const { pools, ...registry } = RangeRegistry.read(registryPath);
 
             if (pools !== undefined) {
-                RangeRegistry.write(registryPath, registry);
+                write(registry);
             }
         });
     }
@@ -89,7 +91,9 @@ export class RangeRegistry {
         platform: NodeJS.Platform = process.platform,
         registryPath = RangeRegistry.defaultPath(os.homedir()),
     ): Promise<RangeEntry> {
-        return RangeRegistry.whileLocked(registryPath, Date.now, () => RangeRegistry.releaseLocked(folder, platform, registryPath));
+        return RangeRegistry.whileLocked(registryPath, Date.now, write =>
+            RangeRegistry.releaseLocked(folder, platform, registryPath, write),
+        );
     }
 
     static async testPort(port: number): Promise<PortBindState> {
@@ -131,16 +135,10 @@ export class RangeRegistry {
         return platform === "win32" ? path.win32.resolve(folder).toLowerCase() : path.posix.resolve(folder);
     }
 
-    private static async claimLocked({
-        registryPath,
-        folder: folderPath,
-        names,
-        pinned = {},
-        move = false,
-        platform,
-        pathExists,
-        testPort,
-    }: ClaimRangeOptions): Promise<RangeClaim> {
+    private static async claimLocked(
+        { registryPath, folder: folderPath, names, pinned = {}, move = false, platform, pathExists, testPort }: ClaimRangeOptions,
+        write: RegistryWrite,
+    ): Promise<RangeClaim> {
         const portsInUse = new Set<number>();
         const testAndRecordPort = async (port: number) => {
             const state = await testPort(port);
@@ -176,10 +174,7 @@ export class RangeRegistry {
             );
         }
 
-        RangeRegistry.write(registryPath, {
-            ...registry,
-            folders: { ...Object.fromEntries(living), [folder]: { ...ownKeys, ...range } },
-        });
+        write({ ...registry, folders: { ...Object.fromEntries(living), [folder]: { ...ownKeys, ...range } } });
 
         return {
             entry: { folder, ...range },
@@ -200,7 +195,7 @@ export class RangeRegistry {
         }
     }
 
-    private static releaseLocked(folder: string, platform: NodeJS.Platform, registryPath: string): RangeEntry {
+    private static releaseLocked(folder: string, platform: NodeJS.Platform, registryPath: string, write: RegistryWrite): RangeEntry {
         const registry = RangeRegistry.read(registryPath);
         const entries = Object.entries(registry.folders);
         const isOwn = ([key]: [string, unknown]) => RangeRegistry.isSameFolder(key, folder, platform);
@@ -214,19 +209,48 @@ export class RangeRegistry {
             throw new Error(`leeway: ${folder} has no range`);
         }
 
-        RangeRegistry.write(registryPath, { ...registry, folders: Object.fromEntries(entries.filter(pair => !isOwn(pair))) });
+        write({ ...registry, folders: Object.fromEntries(entries.filter(pair => !isOwn(pair))) });
 
         return released;
     }
 
-    private static async whileLocked<T>(registryPath: string, now: ClaimRangeOptions["now"], action: () => T | Promise<T>): Promise<T> {
+    private static async whileLocked<T>(
+        registryPath: string,
+        now: ClaimRangeOptions["now"],
+        action: (write: RegistryWrite) => T | Promise<T>,
+    ): Promise<T> {
         const lockPath = `${registryPath}.lock`;
-        const owner = await RangeRegistry.acquireLock(lockPath, now);
 
+        for (;;) {
+            const token = await RangeRegistry.acquireLock(lockPath, now);
+            const tokenPath = path.join(lockPath, token);
+            const refreshing = setInterval(() => RangeRegistry.refreshToken(tokenPath, now()), LOCK_REFRESH_MS);
+            const writeWhileHeld: RegistryWrite = registry => {
+                if (!fs.existsSync(tokenPath)) {
+                    throw new LockLostError();
+                }
+
+                RangeRegistry.write(registryPath, registry);
+            };
+
+            try {
+                return await action(writeWhileHeld);
+            } catch (error) {
+                if (!(error instanceof LockLostError)) {
+                    throw error;
+                }
+            } finally {
+                clearInterval(refreshing);
+                RangeRegistry.unlock(lockPath, token);
+            }
+        }
+    }
+
+    private static refreshToken(tokenPath: string, now: number): void {
         try {
-            return await action();
-        } finally {
-            RangeRegistry.unlock(lockPath, owner);
+            fs.utimesSync(tokenPath, new Date(now), new Date(now));
+        } catch {
+            return;
         }
     }
 
@@ -447,6 +471,8 @@ export class RangeRegistry {
         fs.renameSync(temporaryPath, registryPath);
     }
 }
+
+class LockLostError extends Error {}
 
 function parseJson(text: string): unknown {
     try {

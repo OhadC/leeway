@@ -70,7 +70,10 @@ the fixes; a move takes a range sharing no port with the old one, so the folder'
 **Lock and writes.** The lock is a directory next to the registry holding one file named by its holder's random token, taken by renaming a
 prepared directory into place so it is never seen empty while held. Waiters retry; a token older than ten seconds is deleted so a crash
 never blocks later claims, and the directory is only removed while empty, so breaking a stale lock or a late release never removes another
-claim's lock. A claim that waits over 30 seconds on a lock it cannot break fails, naming the lock. The registry is written atomically (temp file, rename).
+claim's lock. The holder touches its token every two seconds, so a slow claim is never judged stale. Before it writes the registry it checks
+its token is still in the lock; when it isn't, because the holder was paused or the machine slept past ten seconds, it writes nothing, takes
+the lock again and redoes its work. This changes no lock on disk, so older leeways keep working beside it
+([0002](0002-forward-compatible-registry.md)). A claim that waits over 30 seconds on a lock it cannot break fails, naming the lock. The registry is written atomically (temp file, rename).
 
 **Unknown data.** The registry is forward-compatible, as [0002](0002-forward-compatible-registry.md) records: no leeway refuses it
 because of its `version`, every write keeps data it doesn't understand, and every readable range holds its ports. One that isn't a
