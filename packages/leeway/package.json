@@ -1,6 +1,6 @@
 {
     "name": "leeway",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "description": "Per-folder dev port ranges so parallel worktrees and agents never fight over ports",
     "keywords": [
         "port",
