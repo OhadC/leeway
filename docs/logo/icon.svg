@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="leeway">
+  <rect width="64" height="64" rx="14" fill="#0F172A"/>
+  <path d="M16 8H48A8 8 0 0 1 56 16V20Q44 28 32 20Q20 12 8 20V16A8 8 0 0 1 16 8Z" fill="#0891B2"/>
+  <path d="M8 26Q20 18 32 26Q44 34 56 26V38Q44 46 32 38Q20 30 8 38Z" fill="#22D3EE"/>
+  <path d="M8 44Q20 36 32 44Q44 52 56 44V48A8 8 0 0 1 48 56H16A8 8 0 0 1 8 48Z" fill="#0891B2"/>
+</svg>
