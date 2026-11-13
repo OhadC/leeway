@@ -79,6 +79,10 @@ describe("devPorts agent guard", () => {
     it("lets a vitest run in an agent shell through, since vitest imports modules that read ports", () => {
         expect(devPorts(guarded, { CLAUDECODE: "1", VITEST: "true" }).PORT_WEB).toBe(5173);
     });
+
+    it("lets a jest worker in an agent shell through, since jest imports modules that read ports", () => {
+        expect(devPorts(guarded, { CLAUDECODE: "1", JEST_WORKER_ID: "1" })).toEqual({ PORT_WEB: 5173, PORT_API: 4100 });
+    });
 });
 
 describe("devPorts default environment", () => {

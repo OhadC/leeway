@@ -1,3 +1,4 @@
+import { ConfigFile } from "../config-file.ts";
 export type ExecMode = "claim" | "default" | "inherit";
 
 export type ExecRequest = {
@@ -17,7 +18,7 @@ const PLACEHOLDER = /\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g;
 const CMD_METACHARACTERS = /([()\][%!^"`<>&|;, *?])/g;
 
 export class ExecCommand {
-    static readonly ALL_PORTS_PLACEHOLDER = "{{LEEWAY_ENV}}";
+    static readonly ALL_PORTS_PLACEHOLDER = `{{${ConfigFile.ALL_PORTS_VARIABLE}}}`;
 
     static requestOf(args: readonly string[]): ExecRequest | undefined {
         const flagMode = MODE_FLAGS.get(args[0]);
@@ -32,12 +33,18 @@ export class ExecCommand {
         return command.length > 0 ? { mode: flagMode ?? "claim", command } : undefined;
     }
 
-    static unknownPlaceholders(command: readonly string[], names: readonly string[]): string[] {
-        const found = command.flatMap(arg =>
-            [...arg.matchAll(PLACEHOLDER)].filter(match => match[0] !== ExecCommand.ALL_PORTS_PLACEHOLDER).map(match => match[1] ?? ""),
-        );
+    static refusal(command: readonly string[], names: readonly string[]): string | undefined {
+        const unknown = ExecCommand.unknownPlaceholders(command, names);
 
-        return [...new Set(found)].filter(name => !names.includes(name));
+        if (unknown.length > 0) {
+            return `leeway: unknown ${unknown.map(name => `{{${name}}}`).join(", ")} in the command; the config has ${names.join(", ")}`;
+        }
+
+        if (command.length === 1 && command[0]?.includes(ExecCommand.ALL_PORTS_PLACEHOLDER)) {
+            return `leeway: ${ExecCommand.ALL_PORTS_PLACEHOLDER} needs the command as several arguments, not one shell line, so leeway can quote it`;
+        }
+
+        return undefined;
     }
 
     static commandLine(command: readonly string[], ports: Record<string, number>, platform: NodeJS.Platform = process.platform): string {
@@ -45,15 +52,15 @@ export class ExecCommand {
             return command.map(arg => ExecCommand.quoted(withPorts(arg, ports), platform)).join(" ");
         }
 
-        const line = command[0] ?? "";
+        return withPorts(command[0] ?? "", ports);
+    }
 
-        if (line.includes(ExecCommand.ALL_PORTS_PLACEHOLDER)) {
-            throw new Error(
-                `leeway: ${ExecCommand.ALL_PORTS_PLACEHOLDER} needs the command as several arguments, not one shell line, so leeway can quote it`,
-            );
-        }
+    private static unknownPlaceholders(command: readonly string[], names: readonly string[]): string[] {
+        const found = command.flatMap(arg =>
+            [...arg.matchAll(PLACEHOLDER)].filter(match => match[0] !== ExecCommand.ALL_PORTS_PLACEHOLDER).map(match => match[1] ?? ""),
+        );
 
-        return withPorts(line, ports);
+        return [...new Set(found)].filter(name => !names.includes(name));
     }
 
     private static quoted(arg: string, platform: NodeJS.Platform): string {

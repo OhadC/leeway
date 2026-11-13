@@ -1,44 +1,57 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { Pools } from "../src/pools.ts";
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest";
+import { Pools } from "../src/registry/pools.ts";
 import { LeewayCli } from "../test/leeway-cli.ts";
+import { Listeners } from "../test/listeners.ts";
 
 const packageDir = path.resolve(import.meta.dirname, "..");
 const packageJson = readJson(path.join(packageDir, "package.json"));
 const workspaceJson = readJson(path.join(packageDir, "..", "..", "package.json"));
 const scratchDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "leeway-package-")));
-const consumerDir = path.join(scratchDir, "consumer");
 const homeDir = path.join(scratchDir, "home");
 const catalogue = { ports: { PORT_WEB: { port: 5173 }, PORT_API: { port: 3001 } } };
+const devConsumer: Consumer = { vite: packageJson.devDependencies.vite, dir: path.join(scratchDir, "consumer-dev-vite") };
+const consumers: Consumer[] = [devConsumer, { vite: "^7", dir: path.join(scratchDir, "consumer-vite-7") }];
 
 const CONSUMER_FILES: Record<string, string> = {
     "leeway.json": JSON.stringify(catalogue),
     "print-port.mjs": "console.log(process.env.PORT_WEB);\n",
+    "watcher.mjs": Listeners.watcherScript,
     "imports.mjs": `import { devPorts } from "leeway";
 import { leeway } from "leeway/vite";
 import schema from "leeway/schema.json" with { type: "json" };
 const config = ${JSON.stringify(catalogue)};
 console.log(JSON.stringify({ ports: devPorts(config, {}), plugin: leeway({ config, port: "PORT_WEB" }).name, schema: typeof schema }));
 `,
+    "resolve-config.mjs": `import { resolveConfig } from "vite";
+import { leeway } from "leeway/vite";
+const config = ${JSON.stringify(catalogue)};
+const resolved = await resolveConfig({
+    configFile: false,
+    logLevel: "silent",
+    server: { strictPort: false },
+    preview: { strictPort: false },
+    plugins: [leeway({ config, port: "PORT_WEB" })],
+}, "serve");
+console.log(JSON.stringify({
+    server: { port: resolved.server.port, strictPort: resolved.server.strictPort },
+    preview: { port: resolved.preview.port, strictPort: resolved.preview.strictPort },
+    LEEWAY_ENV: resolved.define.LEEWAY_ENV,
+}));
+`,
+    "index.html": `<script type="module" src="./browser-entry.js"></script>\n`,
     "browser-entry.js": `import { devPorts } from "leeway";
 globalThis.ports = devPorts(${JSON.stringify(catalogue)});
 `,
-    "browser-build.mjs": `import { build } from "vite";
+    "browser-build.mjs": `import { build, createLogger } from "vite";
 const warnings = [];
-await build({
-    configFile: false,
-    logLevel: "silent",
-    build: {
-        write: false,
-        rolldownOptions: {
-            input: "browser-entry.js",
-            onLog: (level, log) => level === "warn" && warnings.push(log.message),
-        },
-    },
-});
+const logger = createLogger("silent");
+logger.warn = message => warnings.push(message);
+logger.warnOnce = message => warnings.push(message);
+await build({ configFile: false, logLevel: "silent", customLogger: logger, build: { write: false } });
 if (warnings.length > 0) {
     console.error(warnings.join("\\n"));
     process.exit(1);
@@ -77,27 +90,14 @@ export { catalogue, docs, env, web };
 
 beforeAll(() => {
     stdoutOf("npm", ["pack", "--pack-destination", scratchDir], packageDir);
-    const tarball = fs.readdirSync(scratchDir).find(file => file.endsWith(".tgz"));
-
-    fs.mkdirSync(consumerDir);
-    fs.mkdirSync(homeDir);
-    fs.writeFileSync(
-        path.join(consumerDir, "package.json"),
-        JSON.stringify({
-            name: "leeway-consumer",
-            private: true,
-            type: "module",
-            dependencies: {
-                leeway: `file:${path.join(scratchDir, tarball!)}`,
-                vite: packageJson.devDependencies.vite,
-                typescript: workspaceJson.devDependencies.typescript,
-                "@types/node": workspaceJson.devDependencies["@types/node"],
-            },
-        }),
+    const tarball = path.join(
+        scratchDir,
+        fs.readdirSync(scratchDir).find(file => file.endsWith(".tgz"))!,
     );
-    Object.entries(CONSUMER_FILES).forEach(([name, source]) => fs.writeFileSync(path.join(consumerDir, name), source));
-    stdoutOf("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error"], consumerDir);
-}, 300_000);
+
+    fs.mkdirSync(homeDir);
+    consumers.forEach(consumer => installConsumer(consumer, tarball));
+}, 600_000);
 
 afterAll(() => {
     fs.rmSync(scratchDir, { recursive: true, force: true, maxRetries: 10 });
@@ -124,32 +124,79 @@ describe("the installed leeway bin", () => {
 
         expect(leewayIn(["node", "print-port.mjs"]).trim()).toBe(String(claimed));
     });
+
+    it("kills the leeway run above a listener with kill, so a watcher can't restart it", async () => {
+        const port = LeewayCli.exportedPorts(leewayIn(["env", "--export"])).PORT_WEB;
+        const leeway = spawn("npx leeway node watcher.mjs", {
+            cwd: devConsumer.dir,
+            env: LeewayCli.env(homeDir, {}),
+            stdio: ["ignore", "pipe", "inherit"],
+            shell: true,
+        });
+        onTestFinished(() => Listeners.stopTree(leeway));
+
+        await new Promise(resolve => leeway.stdout.once("data", resolve));
+
+        expect(leewayIn(["kill"])).toContain(`PORT_WEB ${port}  killed`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        expect(await Listeners.accepts(port)).toBe(false);
+    }, 60_000);
 });
 
-describe("the installed leeway entries", () => {
+describe.each(consumers)("the installed leeway entries on vite $vite", consumer => {
     it("import leeway, leeway/vite and leeway/schema.json", () => {
-        expect(JSON.parse(consumerStdout("node", ["imports.mjs"]))).toEqual({
+        expect(JSON.parse(consumerStdout(consumer, "node", ["imports.mjs"]))).toEqual({
             ports: { PORT_WEB: 5173, PORT_API: 3001 },
             plugin: "leeway",
             schema: "object",
         });
     });
 
+    it("set the serve and preview ports, strict, and define LEEWAY_ENV in vite's resolved config", () => {
+        expect(JSON.parse(consumerStdout(consumer, "node", ["resolve-config.mjs"]))).toEqual({
+            server: { port: 5173, strictPort: true },
+            preview: { port: 5173, strictPort: true },
+            LEEWAY_ENV: JSON.stringify({ PORT_WEB: 5173, PORT_API: 3001 }),
+        });
+    });
+
     it("bundle leeway for the browser without a vite warning", () => {
-        expect(consumerStdout("node", ["browser-build.mjs"])).toBe("");
+        expect(consumerStdout(consumer, "node", ["browser-build.mjs"])).toBe("");
     });
 
     it("typecheck a consumer against the published declarations", () => {
-        expect(consumerStdout("npx", ["tsc", "-p", "tsconfig.json"])).toBe("");
+        expect(consumerStdout(consumer, "npx", ["tsc", "-p", "tsconfig.json"])).toBe("");
     });
 });
 
-function leewayIn(args: string[]): string {
-    return consumerStdout("npx", ["leeway", ...args]);
+type Consumer = { vite: string; dir: string };
+
+function installConsumer({ vite, dir }: Consumer, tarball: string) {
+    fs.mkdirSync(dir);
+    fs.writeFileSync(
+        path.join(dir, "package.json"),
+        JSON.stringify({
+            name: "leeway-consumer",
+            private: true,
+            type: "module",
+            dependencies: {
+                leeway: `file:${tarball}`,
+                vite,
+                typescript: workspaceJson.devDependencies.typescript,
+                "@types/node": workspaceJson.devDependencies["@types/node"],
+            },
+        }),
+    );
+    Object.entries(CONSUMER_FILES).forEach(([name, source]) => fs.writeFileSync(path.join(dir, name), source));
+    stdoutOf("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error"], dir);
 }
 
-function consumerStdout(command: string, args: string[]): string {
-    return stdoutOf(command, args, consumerDir, LeewayCli.env(homeDir, {}));
+function leewayIn(args: string[]): string {
+    return consumerStdout(devConsumer, "npx", ["leeway", ...args]);
+}
+
+function consumerStdout(consumer: Consumer, command: string, args: string[]): string {
+    return stdoutOf(command, args, consumer.dir, LeewayCli.env(homeDir, {}));
 }
 
 function stdoutOf(command: string, args: string[], cwd: string, env = process.env): string {

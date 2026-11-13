@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "leeway.json",
-    "description": "The leeway config: the catalogue of ports this repo's dev setup uses, plus the settings that apply to it.",
+    "description": "The leeway config: the catalogue of ports this repo's dev setup uses and its pinned ports, plus the settings that apply to it.",
     "type": "object",
     "required": ["ports"],
     "additionalProperties": false,
@@ -39,8 +39,9 @@
     },
     "definitions": {
         "portName": {
-            "description": "A port name: letters, digits and _, not starting with a digit.",
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            "description": "A port name: letters, digits and _, not starting with a digit. LEEWAY_ENV and LEEWAY_FOLDER are leeway's own, and no two port names may differ only by case.",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "not": { "enum": ["LEEWAY_ENV", "LEEWAY_FOLDER"] }
         },
         "entry": {
             "description": "A port entry. Any properties besides port are yours; leeway ignores them.",
@@ -48,7 +49,7 @@
             "required": ["port"],
             "properties": {
                 "port": {
-                    "description": "The default port: the port this entry uses when no range applies.",
+                    "description": "For a catalogue entry, the default port: the port it uses when no range applies. For a pinned port, the port every folder uses.",
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 65535

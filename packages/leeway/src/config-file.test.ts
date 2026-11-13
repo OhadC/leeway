@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import schema from "../schema.json" with { type: "json" };
 import { ConfigFile } from "./config-file.ts";
 
 const folders: string[] = [];
@@ -145,6 +146,57 @@ describe("ConfigFile.find", () => {
         );
     });
 
+    it("refuses LEEWAY_FOLDER as a port name, which carries the folder to nested leeway calls", () => {
+        const folder = tempFolder();
+        writeConfig(folder, { ports: { LEEWAY_FOLDER: { port: 3000 } } });
+
+        expect(() => ConfigFile.find(folder)).toThrowError(
+            `leeway: LEEWAY_FOLDER in ${path.join(folder, "leeway.json")} is reserved for the folder leeway hands down`,
+        );
+    });
+
+    it("refuses leeway_folder too, which is LEEWAY_FOLDER on Windows", () => {
+        const folder = tempFolder();
+        writeConfig(folder, { ports: { leeway_folder: { port: 3000 } } });
+
+        expect(() => ConfigFile.find(folder)).toThrowError(
+            `leeway: leeway_folder in ${path.join(folder, "leeway.json")} is reserved for the folder leeway hands down`,
+        );
+    });
+
+    it("has the schema refuse the port names leeway refuses, so an editor flags them", () => {
+        expect(schema.definitions.portName.not.enum).toEqual([ConfigFile.ALL_PORTS_VARIABLE, ConfigFile.FOLDER_VARIABLE]);
+    });
+
+    it.each([
+        ["in ports", { ports: { port_web: { port: 3000 }, PORT_WEB: { port: 3001 } } }],
+        ["across ports and pinned", { ports: { port_web: { port: 3000 } }, pinned: { PORT_WEB: { port: 5432 } } }],
+    ])("refuses port names that differ only by case %s, which are one environment variable on Windows", (_, config) => {
+        const folder = tempFolder();
+        writeConfig(folder, config);
+
+        expect(() => ConfigFile.find(folder)).toThrowError(
+            `leeway: port_web and PORT_WEB in ${path.join(folder, "leeway.json")} differ only by case, so on Windows they are one environment variable`,
+        );
+    });
+
+    it("refuses two catalogue entries with the same port, which default ports would hand to two servers", () => {
+        const folder = tempFolder();
+        writeConfig(folder, { ports: { PORT_WEB: { port: 3000 }, PORT_API: { port: 3000 } } });
+
+        expect(() => ConfigFile.find(folder)).toThrowError(
+            `leeway: PORT_WEB and PORT_API in ${path.join(folder, "leeway.json")} both have port 3000`,
+        );
+    });
+
+    it("accepts pinned ports sharing a port, two names for one Postgres", () => {
+        const folder = tempFolder();
+        const pinned = { PORT_DB: { port: 5432 }, PGPORT: { port: 5432 }, PORT_WEB_PINNED: { port: 3000 } };
+        writeConfig(folder, { ports: { PORT_WEB: { port: 3000 } }, pinned });
+
+        expect(ConfigFile.find(folder).config.pinned).toEqual(pinned);
+    });
+
     it.each([
         ["an array", [{ port: 5432 }]],
         ["null", null],
@@ -166,6 +218,7 @@ describe("ConfigFile.find", () => {
             '"db-port" in FILE is not an environment variable name (letters, digits, _; not starting with a digit)',
         ],
         ["LEEWAY_ENV", { LEEWAY_ENV: { port: 5432 } }, "LEEWAY_ENV in FILE is reserved for the {{LEEWAY_ENV}} placeholder"],
+        ["LEEWAY_FOLDER", { LEEWAY_FOLDER: { port: 5432 } }, "LEEWAY_FOLDER in FILE is reserved for the folder leeway hands down"],
         ["a port name the catalogue has too", { PORT_APP: { port: 5432 } }, "PORT_APP in FILE is in both ports and pinned"],
     ])("refuses pinned ports with %s, naming it", (_, pinned, message) => {
         const folder = tempFolder();

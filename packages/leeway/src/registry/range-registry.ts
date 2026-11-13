@@ -15,6 +15,7 @@ export type RangeEntry = {
 export type RangeClaim = {
     entry: RangeEntry;
     previous: RangeEntry | undefined;
+    inUse: Record<string, number>;
 };
 
 export type PortBindState = "free" | "in-use" | "unavailable";
@@ -24,6 +25,7 @@ export type ClaimRangeOptions = {
     folder: string;
     names: readonly string[];
     pinned?: Record<string, number>;
+    move?: boolean;
     platform: NodeJS.Platform;
     pathExists: (candidate: string) => boolean;
     testPort: (port: number) => Promise<PortBindState>;
@@ -33,6 +35,8 @@ export type ClaimRangeOptions = {
 const LOCK_RETRY_MS = 50;
 
 const LOCK_STALE_MS = 10_000;
+
+const LOCK_WAIT_MS = 30_000;
 
 const LOCK_REFRESH_MS = 2_000;
 
@@ -132,9 +136,19 @@ export class RangeRegistry {
     }
 
     private static async claimLocked(
-        { registryPath, folder: folderPath, names, pinned = {}, platform, pathExists, testPort }: ClaimRangeOptions,
+        { registryPath, folder: folderPath, names, pinned = {}, move = false, platform, pathExists, testPort }: ClaimRangeOptions,
         write: RegistryWrite,
     ): Promise<RangeClaim> {
+        const portsInUse = new Set<number>();
+        const testAndRecordPort = async (port: number) => {
+            const state = await testPort(port);
+
+            if (state === "in-use") {
+                portsInUse.add(port);
+            }
+
+            return state;
+        };
         const folder = RangeRegistry.folderKey(folderPath, platform);
         const registry = RangeRegistry.read(registryPath);
         const pools = RangeRegistry.poolsOf(registry, registryPath);
@@ -147,9 +161,12 @@ export class RangeRegistry {
         const [current] = RangeRegistry.readableRanges(own);
         const ownKeys = Object.fromEntries(own.flatMap(([, value]) => (isObject(value) ? Object.entries(value) : [])));
         const others = entries.filter(pair => !isOwn(pair));
-        const kept = current && (await RangeRegistry.keep(current, names, RangeRegistry.readableRanges(others), pools, testPort));
+        const keepable = move ? undefined : current;
+        const kept =
+            keepable && (await RangeRegistry.keep(keepable, names, RangeRegistry.readableRanges(others), pools, testAndRecordPort));
         const living = kept ? others : others.filter(([key]) => pathExists(key));
-        const range = kept ?? (await RangeRegistry.place(current, RangeRegistry.readableRanges(living), names, pools, testPort));
+        const occupied = [...RangeRegistry.readableRanges(living), ...(move && current ? [current] : [])];
+        const range = kept ?? (await RangeRegistry.place(keepable, occupied, names, pools, testAndRecordPort));
 
         if (!range) {
             throw new Error(
@@ -159,7 +176,11 @@ export class RangeRegistry {
 
         write({ ...registry, folders: { ...Object.fromEntries(living), [folder]: { ...ownKeys, ...range } } });
 
-        return { entry: { folder, ...range }, previous: current && { folder, ...current } };
+        return {
+            entry: { folder, ...range },
+            previous: current && { folder, ...current },
+            inUse: Object.fromEntries(Object.entries(range.ports).filter(([, port]) => portsInUse.has(port))),
+        };
     }
 
     private static refusePinnedInPools(pinned: Record<string, number>, pools: Pool[]): void {
@@ -236,6 +257,7 @@ export class RangeRegistry {
     private static async acquireLock(lockPath: string, now: ClaimRangeOptions["now"]): Promise<string> {
         const owner = randomUUID();
         const proposal = `${lockPath}.${owner}`;
+        const waitStart = now();
 
         fs.mkdirSync(proposal, { recursive: true });
 
@@ -252,7 +274,15 @@ export class RangeRegistry {
                     }
                 }
 
-                RangeRegistry.breakStaleLock(lockPath, now());
+                const checkedAt = now();
+
+                if (checkedAt - waitStart >= LOCK_WAIT_MS) {
+                    throw new Error(
+                        `leeway: gave up after ${LOCK_WAIT_MS / 1000} seconds waiting for the lock ${lockPath}; if no leeway is running, delete it`,
+                    );
+                }
+
+                RangeRegistry.breakStaleLock(lockPath, checkedAt);
                 await new Promise(resolve => setTimeout(resolve, LOCK_RETRY_MS));
             }
         } finally {
@@ -292,7 +322,7 @@ export class RangeRegistry {
         const ownPorts = new Set(Object.values(current.ports));
         const blocked = await RangeRegistry.firstBlockedPort(current.start, names.length, stored, pools, ownPorts, testPort);
 
-        return blocked === undefined ? RangeRegistry.rangeAt(current.start, names) : undefined;
+        return blocked === undefined ? RangeRegistry.rangeAt(current.start, names, current) : undefined;
     }
 
     private static async place(
@@ -307,7 +337,7 @@ export class RangeRegistry {
             RangeRegistry.firstBlockedPort(start, names.length, occupied, pools, ownPorts, testPort);
 
         if (current && (await firstBlockedPort(current.start)) === undefined) {
-            return RangeRegistry.rangeAt(current.start, names);
+            return RangeRegistry.rangeAt(current.start, names, current);
         }
 
         for (const pool of pools) {
@@ -315,7 +345,7 @@ export class RangeRegistry {
                 const blocked = await firstBlockedPort(start);
 
                 if (blocked === undefined) {
-                    return RangeRegistry.rangeAt(start, names);
+                    return RangeRegistry.rangeAt(start, names, current);
                 }
 
                 start = blocked + 1;
@@ -414,12 +444,23 @@ export class RangeRegistry {
         return undefined;
     }
 
-    private static rangeAt(start: number, names: readonly string[]): StoredRange {
-        return {
-            start,
-            end: start + names.length - 1,
-            ports: Object.fromEntries(names.map((name, index) => [name, start + index])),
-        };
+    private static rangeAt(start: number, names: readonly string[], previous: StoredRange | undefined): StoredRange {
+        const end = start + names.length - 1;
+        const kept = new Map<string, number>();
+        const keptPorts = new Set<number>();
+
+        for (const name of names) {
+            const port = previous && Object.hasOwn(previous.ports, name) ? previous.ports[name] : undefined;
+
+            if (port !== undefined && port >= start && port <= end && !keptPorts.has(port)) {
+                kept.set(name, port);
+                keptPorts.add(port);
+            }
+        }
+
+        const freePorts = Array.from({ length: names.length }, (_, index) => start + index).filter(port => !keptPorts.has(port));
+
+        return { start, end, ports: Object.fromEntries(names.map(name => [name, kept.get(name) ?? freePorts.shift()!])) };
     }
 
     private static write(registryPath: string, registry: RegistryFile): void {

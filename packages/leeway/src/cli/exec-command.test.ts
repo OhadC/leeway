@@ -45,19 +45,25 @@ describe("ExecCommand.requestOf", () => {
     });
 });
 
-describe("ExecCommand.unknownPlaceholders", () => {
-    it("names each {{NAME}} that is not in the catalogue, once", () => {
-        expect(
-            ExecCommand.unknownPlaceholders(["echo", "{{PORT_WBE}}", "{{PORT_WEB}}:{{PORT_WBE}}", "--x={{X}}"], ["PORT_WEB", "PORT_API"]),
-        ).toEqual(["PORT_WBE", "X"]);
+describe("ExecCommand.refusal", () => {
+    it("names each {{NAME}} that is not a port name of the config, once, and the port names", () => {
+        expect(ExecCommand.refusal(["echo", "{{PORT_WBE}}", "{{PORT_WEB}}:{{PORT_WBE}}", "--x={{X}}"], ["PORT_WEB", "PORT_API"])).toBe(
+            "leeway: unknown {{PORT_WBE}}, {{X}} in the command; the config has PORT_WEB, PORT_API",
+        );
     });
 
     it("knows {{LEEWAY_ENV}} without a catalogue entry", () => {
-        expect(ExecCommand.unknownPlaceholders(["ng", "--define", "LEEWAY_ENV={{LEEWAY_ENV}}"], ["PORT_WEB"])).toEqual([]);
+        expect(ExecCommand.refusal(["ng", "--define", "LEEWAY_ENV={{LEEWAY_ENV}}"], ["PORT_WEB"])).toBeUndefined();
+    });
+
+    it("refuses {{LEEWAY_ENV}} in a single-argument shell line, which it cannot quote", () => {
+        expect(ExecCommand.refusal(["ng --define LEEWAY_ENV={{LEEWAY_ENV}}"], ["PORT_WEB"])).toBe(
+            "leeway: {{LEEWAY_ENV}} needs the command as several arguments, not one shell line, so leeway can quote it",
+        );
     });
 
     it("ignores braces that are not a {{NAME}} placeholder", () => {
-        expect(ExecCommand.unknownPlaceholders(["docker ps --format '{{.Names}}' {PORT_X} {{1X}}"], ["PORT_WEB"])).toEqual([]);
+        expect(ExecCommand.refusal(["docker ps --format '{{.Names}}' {PORT_X} {{1X}}"], ["PORT_WEB"])).toBeUndefined();
     });
 });
 
@@ -79,12 +85,6 @@ describe("ExecCommand.commandLine", () => {
         );
         expect(ExecCommand.commandLine(["ng", "--define", "LEEWAY_ENV={{LEEWAY_ENV}}"], ports, "win32")).toBe(
             String.raw`ng --define ^"LEEWAY_ENV={\^"PORT_WEB\^":21000^,\^"PORT_API\^":21001}^"`,
-        );
-    });
-
-    it("refuses {{LEEWAY_ENV}} in a single-argument shell line, which it cannot quote", () => {
-        expect(() => ExecCommand.commandLine(["ng --define LEEWAY_ENV={{LEEWAY_ENV}}"], { PORT_WEB: 21000 })).toThrowError(
-            "leeway: {{LEEWAY_ENV}} needs the command as several arguments, not one shell line, so leeway can quote it",
         );
     });
 

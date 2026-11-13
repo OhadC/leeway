@@ -42,7 +42,7 @@ function portNamed(ports: Record<string, number>, name: string): number {
     const port = ports[name];
 
     if (port === undefined) {
-        throw new Error(`leeway: ${name} is not in the catalogue (${Object.keys(ports).join(", ")})`);
+        throw new Error(`leeway: unknown port name ${name}; the config has ${Object.keys(ports).join(", ")}`);
     }
 
     return port;

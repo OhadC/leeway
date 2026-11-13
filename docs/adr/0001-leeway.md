@@ -54,12 +54,18 @@ pool ([0002](0002-forward-compatible-registry.md)).
 pass the port test, without checking which folders still exist. Otherwise it drops entries whose folder is gone, tries the folder's
 current start first, so a grown catalogue stays put when the next ports are free, then each pool's gaps from low to high, pools in the
 order they were set. It takes the first candidate that sits inside one pool, overlaps no living entry and whose ports all pass the port
-test. When none fits, the claim fails naming every pool. When the range moves, the CLI warns on stderr.
+test. When none fits, the claim fails naming every pool. Inside the range, a port name keeps its previous port when that port is still
+inside the range and no earlier port name in the catalogue kept it; the other port names take the remaining ports low to high, in
+catalogue order. So adding, reordering or renaming port names moves no port, and a moved range that overlaps its old one keeps what it
+can. When the range moves, the CLI warns on stderr; when it stays put but a port name's port changes, the CLI warns naming that port name.
+`leeway release` drops a folder's range from the registry right away, whether or not the folder still exists.
 
 **Port test.** It binds `127.0.0.1`, `::1`, `0.0.0.0` and `::`, because on Windows a wildcard bind succeeds while something listens on a
 loopback address (vite on `::1`). A missing address family is skipped. The result is free, in-use or unavailable (reserved, access
 denied). A folder's own in-use ports pass, since they are its running servers; an unavailable port moves the range, so a port the OS
-reserved since the last run relocates the range instead of failing the server.
+reserved since the last run relocates the range instead of failing the server. A claim cannot tell its folder's servers from a squatter,
+so it keeps the range and names each in-use port's holder, saying whether a leeway run started it, with `leeway kill` and `leeway move` as
+the fixes; a move takes a range sharing no port with the old one, so the folder's servers that still work restart cleanly.
 
 **Lock and writes.** The lock is a directory next to the registry holding one file named by its holder's random token, taken by renaming a
 prepared directory into place so it is never seen empty while held. Waiters retry; a token older than ten seconds is deleted so a crash
@@ -67,7 +73,7 @@ never blocks later claims, and the directory is only removed while empty, so bre
 claim's lock. The holder touches its token every two seconds, so a slow claim is never judged stale. Before it writes the registry it checks
 its token is still in the lock; when it isn't, because the holder was paused or the machine slept past ten seconds, it writes nothing, takes
 the lock again and redoes its work. This changes no lock on disk, so older leeways keep working beside it
-([0002](0002-forward-compatible-registry.md)). The registry is written atomically (temp file, rename).
+([0002](0002-forward-compatible-registry.md)). A claim that waits over 30 seconds on a lock it cannot break fails, naming the lock. The registry is written atomically (temp file, rename).
 
 **Unknown data.** The registry is forward-compatible, as [0002](0002-forward-compatible-registry.md) records: no leeway refuses it
 because of its `version`, every write keeps data it doesn't understand, and every readable range holds its ports. One that isn't a
@@ -84,7 +90,7 @@ that same folder runs on the ports it was handed, silently, so composed scripts 
 an explicit `--default` or `--inherit` keeps its meaning, a call for another folder claims its own range, and an environment that lacks
 `LEEWAY_FOLDER` or one of the catalogue's ports is claimed as before. `leeway env --export` sets no `LEEWAY_FOLDER`: an agent session's exported range
 is re-checked by the next claim.
-`env`, `list`, `kill` and `pools` are reserved; `--` runs a command of that name. `{{NAME}}` in the command becomes the port, for tools that take a
+`env`, `list`, `kill`, `move`, `release` and `pools` are reserved; `--` runs a command of that name. `{{NAME}}` in the command becomes the port, for tools that take a
 port only as an argument. `{{LEEWAY_ENV}}` becomes every port as JSON, for bundlers without a leeway plugin to define the
 browser's `LEEWAY_ENV` (`--define LEEWAY_ENV={{LEEWAY_ENV}}`); one name for both, so `LEEWAY_ENV` can't be a port name. JSON needs quoting, so it works only in several arguments, which leeway quotes; a one-argument
 shell line with it fails rather than lose its quotes.
@@ -100,8 +106,8 @@ fails instead of drifting. `preview.port` uses the dev server's port name unless
 sees the server's ports; other bundlers get the same from `{{LEEWAY_ENV}}`. Builds keep default ports unless `alwaysInject` is set, so dev ports never leak into a production bundle.
 
 **Agents.** Agents forget rules, so a repo can make forgetting loud. With `"agentGuard": true`, `devPorts` throws in an agent shell (`CLAUDECODE`, `GEMINI_CLI`,
-`CURSOR_AGENT`, `AI_AGENT`) when none of the catalogue's variables are set, except under `VITEST`, where app modules read ports at import
-time. The guard is off by default: a repo whose agents always go through `leeway` doesn't need it, and on it blocks every tool an agent
+`CURSOR_AGENT`, `AI_AGENT`) when none of the catalogue's variables are set, except under vitest (`VITEST`) and jest (`JEST_WORKER_ID`),
+where app modules read ports at import time. The guard is off by default: a repo whose agents always go through `leeway` doesn't need it, and on it blocks every tool an agent
 starts outside `leeway` without ports. Claude Code gets its range up front: a SessionStart hook appends `leeway env --export` to `$CLAUDE_ENV_FILE`, which is sourced before
 every Bash command. Claude Code's PowerShell tool honours that file only when every line is a plain export, so `leeway env --export` writes only `export NAME=port` lines to stdout and everything else to
 stderr. The earlier `dev-ports` rewrote every `pnpm <script>` in a PreToolUse hook; exporting the range once per session covers every command,
@@ -111,8 +117,8 @@ can't fire.
 
 **Listing and killing scan the OS.** `leeway list` shows every range from every repo with the pid on each port, plus orphans: listeners in any pool
 outside every living range. A registry-only listing can't tell a running server from a dead registration, which is most of the question.
-`leeway kill [<port>]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in any
-pool, just the listeners on it; a port outside every range and every pool is refused. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
+`leeway kill [<port> | --orphans]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in
+any pool, just the listeners on it, and with `--orphans` every orphan's listeners that way; a port outside every range and every pool is refused. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
 above it and that run's tree, found by walking parent pids in a fresh process table and recognising the run by its command line
 (`leeway/dist/cli.mjs`). Killing only the listener left watchers (`tsx watch`) alive to restart it on the next file change. An orphan's run
 is spared: it can be a moved range's old server under a run that also serves the current range. Recording each run's pid in the registry was

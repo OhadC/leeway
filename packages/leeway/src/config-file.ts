@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import schema from "../schema.json" with { type: "json" };
 import type { LeewayConfig } from "./dev-ports.ts";
-import { ExecCommand } from "./exec-command.ts";
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -17,6 +16,10 @@ export type FoundConfig = {
 
 export class ConfigFile {
     static readonly NAME = "leeway.json";
+
+    static readonly ALL_PORTS_VARIABLE = "LEEWAY_ENV";
+
+    static readonly FOLDER_VARIABLE = "LEEWAY_FOLDER";
 
     static find(from: string): FoundConfig {
         const folder = ConfigFile.folderOf(from);
@@ -75,16 +78,51 @@ export class ConfigFile {
             throw new Error(`leeway: "pinned" in ${file} must be ${PORTS_SHAPE}`);
         }
 
-        ConfigFile.checkEntries(content.ports, file);
-        ConfigFile.checkEntries(content.pinned ?? {}, file);
+        const pinned = content.pinned ?? {};
 
-        const inBoth = Object.keys(content.pinned ?? {}).find(name => Object.hasOwn(content.ports as object, name));
+        ConfigFile.checkEntries(content.ports, file);
+        ConfigFile.checkEntries(pinned, file);
+
+        const inBoth = Object.keys(pinned).find(name => Object.hasOwn(content.ports as object, name));
 
         if (inBoth !== undefined) {
             throw new Error(`leeway: ${inBoth} in ${file} is in both ports and pinned`);
         }
 
+        ConfigFile.checkCaseClash([...Object.keys(content.ports), ...Object.keys(pinned)], file);
+        ConfigFile.checkSharedPort(content.ports as LeewayConfig["ports"], file);
+
         return content as LeewayConfig;
+    }
+
+    private static checkCaseClash(names: string[], file: string): void {
+        const seen = new Map<string, string>();
+
+        for (const name of names) {
+            const clash = seen.get(name.toUpperCase());
+
+            if (clash !== undefined) {
+                throw new Error(
+                    `leeway: ${clash} and ${name} in ${file} differ only by case, so on Windows they are one environment variable`,
+                );
+            }
+
+            seen.set(name.toUpperCase(), name);
+        }
+    }
+
+    private static checkSharedPort(ports: LeewayConfig["ports"], file: string): void {
+        const seen = new Map<number, string>();
+
+        for (const [name, { port }] of Object.entries(ports)) {
+            const clash = seen.get(port);
+
+            if (clash !== undefined) {
+                throw new Error(`leeway: ${clash} and ${name} in ${file} both have port ${port}`);
+            }
+
+            seen.set(port, name);
+        }
     }
 
     private static checkEntries(entries: Record<string, unknown>, file: string): void {
@@ -95,8 +133,12 @@ export class ConfigFile {
                 );
             }
 
-            if (`{{${name}}}` === ExecCommand.ALL_PORTS_PLACEHOLDER) {
-                throw new Error(`leeway: ${name} in ${file} is reserved for the ${ExecCommand.ALL_PORTS_PLACEHOLDER} placeholder`);
+            if (name === ConfigFile.ALL_PORTS_VARIABLE) {
+                throw new Error(`leeway: ${name} in ${file} is reserved for the {{${name}}} placeholder`);
+            }
+
+            if (name.toUpperCase() === ConfigFile.FOLDER_VARIABLE) {
+                throw new Error(`leeway: ${name} in ${file} is reserved for the folder leeway hands down`);
             }
 
             if (!isPort((entry as { port?: unknown } | null)?.port)) {

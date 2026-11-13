@@ -57,9 +57,13 @@ The machine-wide record of the machine's pools and every folder's range, shared 
 _Avoid_: state, database, lockfile
 
 **Claim**:
-Taking a range for a folder: its current range when still usable, else the first usable gap, pools in set order and each pool low to
-high. A range that changes on a claim has moved.
+Taking a range for a folder: its current range when still usable, else a range at its current start, else the first usable gap, pools
+in set order and each pool low to high. A range that changes on a claim has moved, as has a port name whose port changes.
 _Avoid_: allocate, assign, lease, reserve
+
+**Move**:
+A claim that refuses the folder's current range: the new range shares no port with the old one.
+_Avoid_: reclaim, reassign
 
 **Release**:
 Dropping a folder's range from the registry, so its ports go back to the pools.
@@ -84,6 +88,10 @@ _Avoid_: template, variable, token
 **Orphan**:
 A process listening on a port in a pool, outside every living range, typically a server left behind by a deleted worktree.
 _Avoid_: stray, leftover, zombie
+
+**Squatter**:
+A process listening on a port in a folder's range that is not one of the folder's servers, like a database that took the port first.
+_Avoid_: intruder
 
 ### Agents
 

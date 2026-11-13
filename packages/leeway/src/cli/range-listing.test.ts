@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { type Pool, Pools } from "./pools.ts";
-import type { RangeEntry } from "./range-registry.ts";
+import { type Pool, Pools } from "../registry/pools.ts";
+import type { ProcessRow } from "../os/process-tree.ts";
+import type { RangeEntry } from "../registry/range-registry.ts";
 import { RangeListing } from "./range-listing.ts";
+
+const noProcessRows = (): ProcessRow[] => [];
 
 const APP: RangeEntry = { folder: "C:\\dev\\app", start: 21000, end: 21001, ports: { web: 21000, server: 21001 } };
 
@@ -9,7 +12,7 @@ const TOOL: RangeEntry = { folder: "C:\\dev\\tool", start: 21002, end: 21002, po
 
 describe("RangeListing.collect", () => {
     it("lists every range by start with the pid listening on each named port", () => {
-        const listing = RangeListing.collect([TOOL, APP], [{ port: 21001, pid: 40 }], Pools.DEFAULT, []);
+        const listing = RangeListing.collect([TOOL, APP], [{ port: 21001, pid: 40 }], Pools.DEFAULT, noProcessRows);
 
         expect(listing.ranges).toEqual([
             {
@@ -33,7 +36,7 @@ describe("RangeListing.collect", () => {
                 { port: 21002, pid: 61 },
             ],
             Pools.DEFAULT,
-            [],
+            noProcessRows,
         );
 
         expect(listing.ranges[0]?.ports).toEqual([{ name: "docs", port: 21002, pids: [60, 61] }]);
@@ -47,7 +50,7 @@ describe("RangeListing.collect", () => {
                 { port: 25000, pid: null },
             ],
             Pools.DEFAULT,
-            [],
+            noProcessRows,
         );
 
         expect(listing.ranges[0]?.ports).toEqual([{ name: "docs", port: 21002, pids: [null] }]);
@@ -80,7 +83,7 @@ describe("RangeListing.collect", () => {
                 { start: 3000, end: 3999 },
                 { start: 21000, end: 21002 },
             ],
-            [],
+            noProcessRows,
         );
 
         expect(listing.orphans).toEqual([
@@ -93,7 +96,7 @@ describe("RangeListing.collect", () => {
     it("lists a range outside every pool with its listeners, which are not orphans", () => {
         const outside: RangeEntry = { folder: "C:\\dev\\outside", start: 3000, end: 3001, ports: { web: 3000, api: 3001 } };
 
-        const listing = RangeListing.collect([outside], [{ port: 3001, pid: 70 }], Pools.DEFAULT, []);
+        const listing = RangeListing.collect([outside], [{ port: 3001, pid: 70 }], Pools.DEFAULT, noProcessRows);
 
         expect(listing).toEqual({
             ranges: [
@@ -122,7 +125,7 @@ describe("RangeListing.collect", () => {
                 { port: 4000, pid: 70 },
             ],
             Pools.DEFAULT,
-            [
+            () => [
                 { pid: 4, parent: 0, commandLine: "" },
                 { pid: 40, parent: 1, commandLine: "/usr/bin/node /home/me/app/vite.js" },
                 { pid: 50, parent: 1, commandLine: "node server.js" },
@@ -132,11 +135,50 @@ describe("RangeListing.collect", () => {
 
         expect(listing.commands).toEqual({ "40": "/usr/bin/node /home/me/app/vite.js", "50": "node server.js" });
     });
+
+    it("never reads the process rows when nothing listens in a range or a pool", () => {
+        const processRows = spiedProcessRows([{ pid: 10, parent: 1, commandLine: "node outside.js" }]);
+
+        const listing = RangeListing.collect([APP], [{ port: 4000, pid: 10 }], Pools.DEFAULT, processRows.read);
+
+        expect(processRows.reads).toBe(0);
+        expect(listing.commands).toEqual({});
+    });
+
+    it("never reads the process rows when every listed listener has a hidden pid", () => {
+        const processRows = spiedProcessRows([]);
+
+        RangeListing.collect(
+            [APP],
+            [
+                { port: 21000, pid: null },
+                { port: 25000, pid: null },
+            ],
+            Pools.DEFAULT,
+            processRows.read,
+        );
+
+        expect(processRows.reads).toBe(0);
+    });
+
+    it("reads the process rows once when a range port has a listener", () => {
+        const processRows = spiedProcessRows([{ pid: 40, parent: 1, commandLine: "node vite.js" }]);
+
+        const listing = RangeListing.collect([APP], [{ port: 21000, pid: 40 }], Pools.DEFAULT, processRows.read);
+
+        expect(processRows.reads).toBe(1);
+        expect(listing.commands).toEqual({ "40": "node vite.js" });
+    });
 });
 
 describe("RangeListing.render", () => {
     it("prints a range whose ports are unreadable as its folder and span only", () => {
-        const listing = RangeListing.collect([{ folder: "C:\\dev\\newer", start: 21010, end: 21011, ports: {} }], [], Pools.DEFAULT, []);
+        const listing = RangeListing.collect(
+            [{ folder: "C:\\dev\\newer", start: 21010, end: 21011, ports: {} }],
+            [],
+            Pools.DEFAULT,
+            noProcessRows,
+        );
 
         expect(RangeListing.render(listing, Pools.DEFAULT, undefined, "win32")).toBe("C:\\dev\\newer  21010-21011\n");
     });
@@ -149,7 +191,7 @@ describe("RangeListing.render", () => {
                 { port: 25000, pid: 50 },
             ],
             Pools.DEFAULT,
-            [],
+            noProcessRows,
         );
 
         expect(RangeListing.render(listing, Pools.DEFAULT, undefined, "win32")).toBe(
@@ -174,9 +216,9 @@ describe("RangeListing.render", () => {
             { start: 21000, end: 29999 },
         ];
 
-        expect(RangeListing.render(RangeListing.collect([], [{ port: 4000, pid: 10 }], pools, []), pools, undefined, "win32")).toBe(
-            "leeway: no ranges are registered and nothing is listening in 3000-3999, 21000-29999\n",
-        );
+        expect(
+            RangeListing.render(RangeListing.collect([], [{ port: 4000, pid: 10 }], pools, noProcessRows), pools, undefined, "win32"),
+        ).toBe("leeway: no ranges are registered and nothing is listening in 3000-3999, 21000-29999\n");
     });
 
     it("prints the short command beside each pid that has a process row and marks this folder's range", () => {
@@ -188,7 +230,7 @@ describe("RangeListing.render", () => {
                 { port: 25000, pid: 50 },
             ],
             Pools.DEFAULT,
-            [
+            () => [
                 { pid: 40, parent: 1, commandLine: '"C:\\Program Files\\nodejs\\node.exe" C:\\dev\\app\\node_modules\\vite\\bin\\vite.js' },
                 { pid: 50, parent: 1, commandLine: "/usr/bin/node server.js --watch" },
                 { pid: 60, parent: 1, commandLine: "/usr/bin/node unrelated.js" },
@@ -219,7 +261,7 @@ describe("RangeListing.render", () => {
                 { port: 21002, pid: 61 },
             ],
             Pools.DEFAULT,
-            [
+            () => [
                 { pid: 60, parent: 1, commandLine: "node a.js" },
                 { pid: 61, parent: 1, commandLine: "node b.js" },
             ],
@@ -249,3 +291,16 @@ describe("RangeListing.shortCommand", () => {
         expect(shortened).toHaveLength(60);
     });
 });
+
+function spiedProcessRows(rows: ProcessRow[]) {
+    const spied = {
+        reads: 0,
+        read: () => {
+            spied.reads += 1;
+
+            return rows;
+        },
+    };
+
+    return spied;
+}

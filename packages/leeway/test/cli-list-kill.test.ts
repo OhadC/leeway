@@ -3,27 +3,19 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ProcessTree } from "../src/process-tree.ts";
-import { RangeRegistry } from "../src/range-registry.ts";
+import { RangeRegistry } from "../src/registry/range-registry.ts";
 import { LeewayCli } from "./leeway-cli.ts";
-
-const SERVER = 'require("node:net").createServer().listen(Number(process.argv[1]), () => console.log("listening"));';
-
-const WATCHER = `import { spawn } from "node:child_process";
-const server = ${JSON.stringify(SERVER)};
-const start = () => spawn(process.execPath, ["-e", server, process.env.PORT_WEB], { stdio: "inherit" }).on("exit", start);
-start();
-`;
+import { Listeners } from "./listeners.ts";
 
 const KEEPER = `import { spawn } from "node:child_process";
-spawn(process.execPath, ["-e", ${JSON.stringify(SERVER)}, process.argv[2]], { stdio: "inherit" });
+spawn(process.execPath, ["-e", ${JSON.stringify(Listeners.serverScript)}, process.argv[2]], { stdio: "inherit" });
 setInterval(() => {}, 1000);
 `;
 
 const servers: ChildProcess[] = [];
 
 afterEach(async () => {
-    await Promise.all(servers.splice(0).map(stopServer));
+    await Promise.all(servers.splice(0).map(Listeners.stopTree));
     LeewayCli.removeTemporaryDirs();
 });
 
@@ -89,12 +81,12 @@ describe("leeway list and kill", () => {
 
         expect(result.status).toBe(0);
         expect(result.stdout).toContain(`pid ${server.pid}  PORT_WEB ${ports.PORT_WEB}  killed`);
-        expect(await accepts(ports.PORT_WEB)).toBe(false);
+        expect(await Listeners.accepts(ports.PORT_WEB)).toBe(false);
     }, 60_000);
 
     it("kills the leeway run above a listener, so a watcher can't restart it", async () => {
         const { dir, home, ports } = claimedFolder();
-        fs.writeFileSync(path.join(dir, "watcher.mjs"), WATCHER);
+        fs.writeFileSync(path.join(dir, "watcher.mjs"), Listeners.watcherScript);
         const leeway = LeewayCli.start(["node", "watcher.mjs"], dir, home);
         const exited = new Promise(resolve => leeway.once("exit", resolve));
 
@@ -105,7 +97,7 @@ describe("leeway list and kill", () => {
 
         expect(result.stdout).toContain(`PORT_WEB ${ports.PORT_WEB}  killed`);
         await new Promise(resolve => setTimeout(resolve, 1000));
-        expect(await accepts(ports.PORT_WEB)).toBe(false);
+        expect(await Listeners.accepts(ports.PORT_WEB)).toBe(false);
         await exited;
     }, 60_000);
 
@@ -118,7 +110,7 @@ describe("leeway list and kill", () => {
 
         expect(result.status).toBe(0);
         expect(result.stdout).toBe(`leeway: orphan port ${orphanPort}\n  pid ${server.pid}  ${orphanPort}  killed\n`);
-        expect(await accepts(orphanPort)).toBe(false);
+        expect(await Listeners.accepts(orphanPort)).toBe(false);
     }, 60_000);
 
     it("lists and kills an orphan listening in a pool the machine's owner set", async () => {
@@ -134,7 +126,7 @@ describe("leeway list and kill", () => {
             new RegExp(`^orphans \\(in a pool, outside every range\\)\\n  ${orphanPort}  pid ${server.pid}  node.*\\n$`),
         );
         expect(killed.stdout).toBe(`leeway: orphan port ${orphanPort}\n  pid ${server.pid}  ${orphanPort}  killed\n`);
-        expect(await accepts(orphanPort)).toBe(false);
+        expect(await Listeners.accepts(orphanPort)).toBe(false);
     }, 60_000);
 
     it("kills only the listener on an orphan port, leaving the leeway run above it", async () => {
@@ -150,7 +142,7 @@ describe("leeway list and kill", () => {
 
         expect(result.stdout).toContain(`${orphanPort}  killed`);
         await new Promise(resolve => setTimeout(resolve, 1000));
-        expect(await accepts(orphanPort)).toBe(false);
+        expect(await Listeners.accepts(orphanPort)).toBe(false);
         expect(leeway.exitCode).toBeNull();
     }, 60_000);
 
@@ -174,9 +166,9 @@ describe("leeway list and kill", () => {
         expect(kills.sort()).toEqual(
             [`  pid ${firstOrphan.pid}  ${firstOrphanPort}  killed`, `  pid ${secondOrphan.pid}  ${secondOrphanPort}  killed`].sort(),
         );
-        expect(await accepts(firstOrphanPort)).toBe(false);
-        expect(await accepts(secondOrphanPort)).toBe(false);
-        expect(await accepts(rangePort)).toBe(true);
+        expect(await Listeners.accepts(firstOrphanPort)).toBe(false);
+        expect(await Listeners.accepts(secondOrphanPort)).toBe(false);
+        expect(await Listeners.accepts(rangePort)).toBe(true);
         expect(inRange.exitCode).toBeNull();
     }, 60_000);
 
@@ -209,7 +201,7 @@ describe("leeway list and kill", () => {
 
         expect(result.status).toBe(0);
         expect(result.stdout).toContain(`pid ${server.pid}  PORT_WEB ${ports.PORT_WEB}  killed`);
-        expect(await accepts(ports.PORT_WEB)).toBe(false);
+        expect(await Listeners.accepts(ports.PORT_WEB)).toBe(false);
     }, 60_000);
 
     it("kills the range holding a given port while the pools are unreadable, and refuses an orphan port", () => {
@@ -285,7 +277,7 @@ describe("leeway release", () => {
             `leeway: released ${ports.PORT_WEB}-${ports.PORT_API} for ${shown(dir)}\n` +
                 `  pid ${server.pid}  ${ports.PORT_WEB}  still listening, now an orphan; stop it with leeway kill ${ports.PORT_WEB}\n`,
         );
-        expect(await accepts(ports.PORT_WEB)).toBe(true);
+        expect(await Listeners.accepts(ports.PORT_WEB)).toBe(true);
         expect(JSON.parse(listed.stdout).orphans).toEqual([{ port: ports.PORT_WEB, pid: server.pid }]);
     }, 60_000);
 
@@ -313,7 +305,7 @@ function shown(dir: string): string {
 }
 
 function startServer(port: number | undefined): Promise<ChildProcess> {
-    const server = spawn(process.execPath, ["-e", SERVER, String(port)], { stdio: ["ignore", "pipe", "inherit"] });
+    const server = spawn(process.execPath, ["-e", Listeners.serverScript, String(port)], { stdio: ["ignore", "pipe", "inherit"] });
 
     servers.push(server);
 
@@ -321,17 +313,6 @@ function startServer(port: number | undefined): Promise<ChildProcess> {
         server.stdout?.once("data", () => resolve(server));
         server.once("exit", code => reject(new Error(`server exited with ${code} before listening`)));
     });
-}
-
-async function stopServer(server: ChildProcess): Promise<void> {
-    if (server.exitCode !== null || server.signalCode !== null) {
-        return;
-    }
-
-    const exited = new Promise(resolve => server.once("exit", resolve));
-
-    ProcessTree.killTreeQuietly(server.pid ?? 0);
-    await exited;
 }
 
 async function freePorts(count: number): Promise<number[]> {
@@ -343,15 +324,4 @@ async function freePorts(count: number): Promise<number[]> {
     await Promise.all(holders.map(holder => new Promise(resolve => holder.close(resolve))));
 
     return ports;
-}
-
-function accepts(port: number | undefined): Promise<boolean> {
-    return new Promise(resolve => {
-        const socket = net.connect({ host: "127.0.0.1", port: port ?? 0 }, () => {
-            socket.destroy();
-            resolve(true);
-        });
-
-        socket.once("error", () => resolve(false));
-    });
 }
