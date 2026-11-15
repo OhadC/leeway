@@ -120,8 +120,9 @@ outside every living range. A registry-only listing can't tell a running server 
 `leeway kill [<port> | --orphans]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in
 any pool, just the listeners on it, and with `--orphans` every orphan's listeners that way; a port outside every range and every pool is refused. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
 above it and that run's tree, found by walking parent pids in a fresh process table and recognising the run by its command line
-(`leeway/dist/cli.mjs`). Killing only the listener left watchers (`tsx watch`) alive to restart it on the next file change. A run above `leeway kill` itself is never the target, or the kill would kill itself before
-reporting: the kill takes the topmost process above the listener that is not above the kill, and refuses a listener that is. An orphan's run
+(`leeway/dist/cli.mjs`). Killing only the listener left watchers (`tsx watch`) alive to restart it on the next file change. A run
+above `leeway kill` itself is never the target, since its tree holds the kill, which would die before it reports: the kill takes the
+topmost process above the listener that is not above the kill, and refuses a listener that is. An orphan's run
 is spared: it can be a moved range's old server under a run that also serves the current range. Recording each run's pid in the registry was
 rejected: it puts lock contention on every run, leaves stale pids after a hard kill, and a reused pid would kill an unrelated tree; the live
 table has none of that. On Windows a parent pid is ignored when that process started after its child, since Windows reuses the pids of
