@@ -304,7 +304,7 @@ describe("leeway move", () => {
         expect(moved.status).toBe(0);
         expect(moved.stderr).toMatch(
             new RegExp(
-                `\\n  pid ${server.pid}  ${ports.PORT_WEB}  still listening, now an orphan; stop it with leeway kill ${ports.PORT_WEB}\\n$`,
+                `\\n  pid ${server.pid}  ${ports.PORT_WEB}  still listening; if it's this folder's, stop it with leeway kill ${ports.PORT_WEB}\\n$`,
             ),
         );
         expect(killed.status).toBe(0);
