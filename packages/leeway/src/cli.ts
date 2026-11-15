@@ -169,15 +169,15 @@ async function moveRange(found: FoundConfig): Promise<void> {
     printClaim(found, claim);
 
     if (claim.previous) {
-        process.stderr.write(newOrphansOrUnchecked(claim.previous));
+        process.stderr.write(orphanLinesOrScanFailure(claim.previous));
     }
 }
 
-function newOrphansOrUnchecked(left: RangeEntry): string {
+function orphanLinesOrScanFailure(previous: RangeEntry): string {
     try {
-        return newOrphans(left, RangeRegistry.pools());
+        return orphanLines(previous, RangeRegistry.pools());
     } catch {
-        return `leeway: could not check ${left.start}-${left.end} for servers still listening\n`;
+        return `leeway: could not check ${previous.start}-${previous.end} for servers still listening\n`;
     }
 }
 
@@ -185,10 +185,10 @@ async function releaseRange(folder: string | undefined): Promise<void> {
     const pools = RangeRegistry.pools();
     const released = await RangeRegistry.release(folder === undefined ? ConfigFile.find(process.cwd()).folder : path.resolve(folder));
 
-    process.stdout.write(`leeway: released ${released.start}-${released.end} for ${released.folder}\n` + newOrphans(released, pools));
+    process.stdout.write(`leeway: released ${released.start}-${released.end} for ${released.folder}\n` + orphanLines(released, pools));
 }
 
-function newOrphans({ start, end }: RangeEntry, pools: Pool[]): string {
+function orphanLines({ start, end }: RangeEntry, pools: Pool[]): string {
     return ListenerScan.listeners()
         .filter(listener => listener.port >= start && listener.port <= end && Pools.holds(pools, listener.port))
         .map(({ pid, port }) => `  pid ${pid ?? "?"}  ${port}  still listening, now an orphan; stop it with leeway kill ${port}\n`)
