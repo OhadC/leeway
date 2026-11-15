@@ -563,19 +563,22 @@ describe("leeway errors", () => {
 });
 
 describe.skipIf(process.platform === "win32")("leeway <command> on a signal", () => {
-    it.each(["SIGINT", "SIGTERM", "SIGHUP"] as const)("%s stops the whole command tree, so nothing is left listening", async signal => {
-        const { dir, home } = temporaryFolder();
-        const leeway = startLeeway(["node", "launcher.mjs"], dir, home);
-        const port = await listeningPort(leeway);
-        const exitCode = new Promise(resolve => leeway.once("exit", resolve));
+    it.each(["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const)(
+        "%s stops the whole command tree, so nothing is left listening",
+        async signal => {
+            const { dir, home } = temporaryFolder();
+            const leeway = startLeeway(["node", "launcher.mjs"], dir, home);
+            const port = await listeningPort(leeway);
+            const exitCode = new Promise(resolve => leeway.once("exit", resolve));
 
-        expect(await answers(port)).toBe(true);
+            expect(await answers(port)).toBe(true);
 
-        leeway.kill(signal);
+            leeway.kill(signal);
 
-        expect(await exitCode).not.toBe(0);
-        expect(await stopsAnswering(port)).toBe(true);
-    });
+            expect(await exitCode).not.toBe(0);
+            expect(await stopsAnswering(port)).toBe(true);
+        },
+    );
 });
 
 describe.runIf(process.platform === "win32")("leeway <command> on Ctrl+C in its console", () => {

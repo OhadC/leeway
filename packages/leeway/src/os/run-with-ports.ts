@@ -3,7 +3,7 @@ import { ProcessTree } from "./process-tree.ts";
 
 const WINDOWS_STOP_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGBREAK", "SIGHUP"];
 
-const POSIX_FORWARDED_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
+const POSIX_FORWARDED_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"];
 
 export class RunWithPorts {
     static runAndExit(commandLine: string, env: Record<string, string | number>): void {
