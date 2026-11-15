@@ -74,6 +74,10 @@ claim's lock. The holder touches its token every two seconds, so a slow claim is
 its token is still in the lock; when it isn't, because the holder was paused or the machine slept past ten seconds, it writes nothing, takes
 the lock again and redoes its work. This changes no lock on disk, so older leeways keep working beside it
 ([0002](0002-forward-compatible-registry.md)). A claim that waits over 30 seconds on a lock it cannot break fails, naming the lock. The registry is written atomically (temp file, rename).
+A claim that changes nothing, keeping the folder's stored range with an entry equal to the stored one, reads without the lock and writes
+nothing, so it works where the registry folder refuses writes, as in an agent sandbox. That is safe: the registry is only ever replaced
+whole, and other folders' claims already stay out of a stored range. Dropping entries whose folder is gone waits for the next claim that
+writes.
 
 **Unknown data.** The registry is forward-compatible, as [0002](0002-forward-compatible-registry.md) records: no leeway refuses it
 because of its `version`, every write keeps data it doesn't understand, and every readable range holds its ports. One that isn't a

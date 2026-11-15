@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { Pools } from "../src/registry/pools.ts";
 import { type RangeEntry, RangeRegistry } from "../src/registry/range-registry.ts";
 import { LeewayCli } from "./leeway-cli.ts";
+import { WriteRefusingFolder } from "./write-refusing-folder.ts";
 
 const SERVER =
     "require('node:http').createServer((q, s) => s.end('ok')).listen(process.env.PORT_WEB, () => console.log('listening ' + process.env.PORT_WEB))";
@@ -33,6 +34,7 @@ const ownConsoleLeeways: { pid: number; dir: string }[] = [];
 afterEach(async () => {
     await Promise.all(runningLeeways.splice(0).map(stopLeeway));
     ownConsoleLeeways.splice(0).forEach(stopOwnConsoleLeeway);
+    WriteRefusingFolder.allowAgain();
     LeewayCli.removeTemporaryDirs();
 });
 
@@ -85,6 +87,31 @@ describe("leeway env --export", () => {
         );
         expect(LeewayCli.claimedFolders(home)).toEqual([]);
         expect(defaults.stdout).toBe(`${pinnedPort}\n`);
+    });
+
+    it("prints the stored range and exits 0 when the registry folder refuses writes", ({ skip }) => {
+        const { dir, home } = temporaryFolder();
+        const claimed = LeewayCli.run(["env", "--export"], dir, home);
+        skip(!WriteRefusingFolder.refuse(path.dirname(RangeRegistry.defaultPath(home))), WriteRefusingFolder.unsupported);
+
+        const again = LeewayCli.run(["env", "--export"], dir, home);
+
+        expect(again.status).toBe(0);
+        expect(again.stdout).toBe(claimed.stdout);
+    });
+
+    it("fails a first claim with one leeway line naming the registry folder when it refuses writes", ({ skip }) => {
+        const { dir, home } = temporaryFolder();
+        const registryFolder = path.dirname(RangeRegistry.defaultPath(home));
+        skip(!WriteRefusingFolder.refuse(registryFolder), WriteRefusingFolder.unsupported);
+
+        const result = LeewayCli.run(["env", "--export"], dir, home);
+
+        expect(result.status).toBe(1);
+        expect(result.stdout).toBe("");
+        expect(result.stderr).toBe(
+            `leeway: the registry folder ${registryFolder} refuses writes; allow writes to it, or run leeway env in this folder once outside the sandbox\n`,
+        );
     });
 
     it("warns on stderr when the range had to move since the last claim", () => {

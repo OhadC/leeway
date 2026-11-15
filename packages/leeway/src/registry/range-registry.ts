@@ -3,6 +3,7 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { type Pool, Pools } from "./pools.ts";
 
 export type RangeEntry = {
@@ -42,6 +43,8 @@ const LOCK_REFRESH_MS = 2_000;
 
 const LOCK_BUSY_CODES = new Set(["EEXIST", "ENOTEMPTY", "EPERM", "EACCES", "EBUSY"]);
 
+const WRITE_REFUSED_CODES = new Set(["EPERM", "EACCES", "EROFS"]);
+
 const BIND_HOSTS = ["127.0.0.1", "::1", "0.0.0.0", "::"];
 
 const MISSING_ADDRESS_FAMILY_CODES = new Set(["EAFNOSUPPORT", "EADDRNOTAVAIL"]);
@@ -62,8 +65,8 @@ export class RangeRegistry {
         return path.join(home, ".leeway", "ranges.json");
     }
 
-    static claim(options: ClaimRangeOptions): Promise<RangeClaim> {
-        return RangeRegistry.whileLocked(options.registryPath, options.now, write => RangeRegistry.claimLocked(options, write));
+    static async claim(options: ClaimRangeOptions): Promise<RangeClaim> {
+        return (await RangeRegistry.claimChangingNothing(options)) ?? RangeRegistry.claimWriting(options);
     }
 
     static pools(registryPath = RangeRegistry.defaultPath(os.homedir())): Pool[] {
@@ -135,20 +138,60 @@ export class RangeRegistry {
         return platform === "win32" ? path.win32.resolve(folder).toLowerCase() : path.posix.resolve(folder);
     }
 
-    private static async claimLocked(
-        { registryPath, folder: folderPath, names, pinned = {}, move = false, platform, pathExists, testPort }: ClaimRangeOptions,
-        write: RegistryWrite,
-    ): Promise<RangeClaim> {
-        const portsInUse = new Set<number>();
-        const testAndRecordPort = async (port: number) => {
-            const state = await testPort(port);
+    private static async claimChangingNothing(options: ClaimRangeOptions): Promise<RangeClaim | undefined> {
+        const { folder, own, ownKeys, others, current, pools, portTests } = RangeRegistry.survey(options);
+        const [stored, ...otherSpellings] = own;
 
-            if (state === "in-use") {
-                portsInUse.add(port);
+        if (options.move || !current || !stored || otherSpellings.length > 0 || stored[0] !== folder) {
+            return undefined;
+        }
+
+        const kept = await RangeRegistry.keep(current, options.names, RangeRegistry.readableRanges(others), pools, portTests.testPort);
+
+        if (!kept || !isDeepStrictEqual(stored[1], { ...ownKeys, ...kept })) {
+            return undefined;
+        }
+
+        return { entry: { folder, ...kept }, previous: { folder, ...current }, inUse: portTests.inUse(kept.ports) };
+    }
+
+    private static async claimWriting(options: ClaimRangeOptions): Promise<RangeClaim> {
+        try {
+            return await RangeRegistry.whileLocked(options.registryPath, options.now, write => RangeRegistry.claimLocked(options, write));
+        } catch (error) {
+            if (WRITE_REFUSED_CODES.has((error as NodeJS.ErrnoException).code ?? "")) {
+                throw new Error(
+                    `leeway: the registry folder ${path.dirname(options.registryPath)} refuses writes; allow writes to it, or run leeway env in this folder once outside the sandbox`,
+                    { cause: error },
+                );
             }
 
-            return state;
-        };
+            throw error;
+        }
+    }
+
+    private static async claimLocked(options: ClaimRangeOptions, write: RegistryWrite): Promise<RangeClaim> {
+        const { names, move = false, pathExists } = options;
+        const { folder, registry, ownKeys, others, current, pools, portTests } = RangeRegistry.survey(options);
+        const keepable = move ? undefined : current;
+        const kept =
+            keepable && (await RangeRegistry.keep(keepable, names, RangeRegistry.readableRanges(others), pools, portTests.testPort));
+        const living = kept ? others : others.filter(([key]) => pathExists(key));
+        const occupied = [...RangeRegistry.readableRanges(living), ...(move && current ? [current] : [])];
+        const range = kept ?? (await RangeRegistry.place(keepable, occupied, names, pools, portTests.testPort));
+
+        if (!range) {
+            throw new Error(
+                `leeway: no room for ${names.length} ports in ${Pools.text(pools)}; release unused folders' ranges with leeway release <folder> and try again`,
+            );
+        }
+
+        write({ ...registry, folders: { ...Object.fromEntries(living), [folder]: { ...ownKeys, ...range } } });
+
+        return { entry: { folder, ...range }, previous: current && { folder, ...current }, inUse: portTests.inUse(range.ports) };
+    }
+
+    private static survey({ registryPath, folder: folderPath, pinned = {}, platform, testPort }: ClaimRangeOptions) {
         const folder = RangeRegistry.folderKey(folderPath, platform);
         const registry = RangeRegistry.read(registryPath);
         const pools = RangeRegistry.poolsOf(registry, registryPath);
@@ -160,26 +203,16 @@ export class RangeRegistry {
         const own = entries.filter(isOwn);
         const [current] = RangeRegistry.readableRanges(own);
         const ownKeys = Object.fromEntries(own.flatMap(([, value]) => (isObject(value) ? Object.entries(value) : [])));
-        const others = entries.filter(pair => !isOwn(pair));
-        const keepable = move ? undefined : current;
-        const kept =
-            keepable && (await RangeRegistry.keep(keepable, names, RangeRegistry.readableRanges(others), pools, testAndRecordPort));
-        const living = kept ? others : others.filter(([key]) => pathExists(key));
-        const occupied = [...RangeRegistry.readableRanges(living), ...(move && current ? [current] : [])];
-        const range = kept ?? (await RangeRegistry.place(keepable, occupied, names, pools, testAndRecordPort));
-
-        if (!range) {
-            throw new Error(
-                `leeway: no room for ${names.length} ports in ${Pools.text(pools)}; release unused folders' ranges with leeway release <folder> and try again`,
-            );
-        }
-
-        write({ ...registry, folders: { ...Object.fromEntries(living), [folder]: { ...ownKeys, ...range } } });
 
         return {
-            entry: { folder, ...range },
-            previous: current && { folder, ...current },
-            inUse: Object.fromEntries(Object.entries(range.ports).filter(([, port]) => portsInUse.has(port))),
+            folder,
+            registry,
+            pools,
+            own,
+            ownKeys,
+            others: entries.filter(pair => !isOwn(pair)),
+            current,
+            portTests: recordingPortsInUse(testPort),
         };
     }
 
@@ -484,6 +517,23 @@ function parseJson(text: string): unknown {
 
 function isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function recordingPortsInUse(testPort: ClaimRangeOptions["testPort"]) {
+    const portsInUse = new Set<number>();
+
+    return {
+        testPort: async (port: number) => {
+            const state = await testPort(port);
+
+            if (state === "in-use") {
+                portsInUse.add(port);
+            }
+
+            return state;
+        },
+        inUse: (ports: Record<string, number>) => Object.fromEntries(Object.entries(ports).filter(([, port]) => portsInUse.has(port))),
+    };
 }
 
 function bindErrorCode(port: number, host: string): Promise<string | undefined> {
