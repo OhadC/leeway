@@ -209,8 +209,9 @@ folder still claims its own range, and an explicit `--default` or `--inherit` ke
 - The command runs through the system shell (`sh`, `cmd.exe` on Windows).
 - leeway exits with the shell's exit code (a missing command: 127 from `sh`, 1 from `cmd.exe`; a command killed by a signal: usually
   128 plus the signal number from `sh`), or 1 if the shell itself died from a signal or could not start.
-- Stopping leeway stops the whole command tree: Ctrl+C, Ctrl+\, closing the terminal, or SIGINT, SIGTERM, SIGHUP
-  or SIGQUIT on Linux and macOS; Ctrl+C, Ctrl+Break or closing the console on Windows.
+- Stopping leeway stops the whole command tree: Ctrl+C, `Ctrl+\`, closing the terminal, or SIGINT, SIGTERM, SIGHUP
+  or SIGQUIT on Linux and macOS; Ctrl+C, Ctrl+Break or closing the console on Windows. On Linux and macOS the tree gets the signal
+  leeway got, so a command that handles it and keeps running is not stopped ([Limits](#limits)).
 
 `leeway --help` (or `-h`) prints the usage, `leeway --version` the version.
 
@@ -493,6 +494,8 @@ eval "$(npx leeway env --export)"
   it still reads keys from stdin, but tools that open `/dev/tty` directly (some password prompts, full-screen TUIs) fail.
 - Ctrl+Z on Linux and macOS suspends `leeway` alone: the command, in its own session, keeps running on its ports. `fg`, then Ctrl+C,
   stops it.
+- On Linux and macOS a command that handles a signal and keeps running can outlive `leeway` and stay on its ports: a JVM prints a
+  thread dump on `Ctrl+\` and carries on, while the `sh` above it dies and `leeway` exits. `leeway kill` stops it.
 - `nohup leeway <command>` doesn't outlive the terminal: `leeway` still gets the hangup and stops the command tree. In bash or zsh, use
   `leeway <command> > leeway.log 2>&1 & disown` instead.
 - On Windows, Ctrl+C force-kills the command tree at once, so a command that cleans up on Ctrl+C may die before it finishes. Run such a
