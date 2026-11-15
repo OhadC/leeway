@@ -252,13 +252,12 @@ export class RangeRegistry {
             const token = await RangeRegistry.acquireLock(lockPath, now);
             const tokenPath = path.join(lockPath, token);
             const refreshing = setInterval(() => RangeRegistry.refreshToken(tokenPath, now()), LOCK_REFRESH_MS);
-            const writeWhileHeld: RegistryWrite = async registry => {
+            const assertLockHeld = (): void => {
                 if (!fs.existsSync(tokenPath)) {
                     throw new LockLostError();
                 }
-
-                await RangeRegistry.write(registryPath, registry);
             };
+            const writeWhileHeld: RegistryWrite = registry => RangeRegistry.write(registryPath, registry, assertLockHeld);
 
             try {
                 return await action(writeWhileHeld);
@@ -505,26 +504,29 @@ export class RangeRegistry {
         return { start, end, ports: Object.fromEntries(names.map(name => [name, kept.get(name) ?? freePorts.shift()!])) };
     }
 
-    private static async write(registryPath: string, registry: RegistryFile): Promise<void> {
+    private static async write(registryPath: string, registry: RegistryFile, assertLockHeld: () => void): Promise<void> {
         const temporaryPath = `${registryPath}.${process.pid}.tmp`;
 
-        fs.writeFileSync(temporaryPath, `${JSON.stringify(registry, undefined, 4)}\n`);
-
         try {
-            await RangeRegistry.renameOnceReadersLetGo(temporaryPath, registryPath);
+            fs.writeFileSync(temporaryPath, `${JSON.stringify(registry, undefined, 4)}\n`);
+            await RangeRegistry.renameOnceReadersLetGo(temporaryPath, registryPath, assertLockHeld);
         } catch (error) {
             fs.rmSync(temporaryPath, { force: true });
             throw error;
         }
     }
 
-    private static async renameOnceReadersLetGo(from: string, to: string): Promise<void> {
+    private static async renameOnceReadersLetGo(from: string, to: string, assertLockHeld: () => void): Promise<void> {
         for (let attempt = 1; ; attempt++) {
+            assertLockHeld();
+
             try {
                 fs.renameSync(from, to);
                 return;
             } catch (error) {
-                if (attempt === RENAME_ATTEMPTS || !RENAME_BUSY_CODES.has((error as NodeJS.ErrnoException).code ?? "")) {
+                const heldByReader = process.platform === "win32" && RENAME_BUSY_CODES.has((error as NodeJS.ErrnoException).code ?? "");
+
+                if (attempt === RENAME_ATTEMPTS || !heldByReader) {
                     throw error;
                 }
             }
