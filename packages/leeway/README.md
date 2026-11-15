@@ -315,7 +315,9 @@ folders:
 Kills every process tree listening in this folder's range, or with a port, in the range that contains it (any repo's). A listener started
 under `leeway` is killed with the nearest `leeway` run above it and that run's whole tree, so a watcher between them (`tsx watch`,
 `nodemon`) can't restart it; that takes down whatever else the run started too, like a `tsc --watch` beside the server under the same
-`concurrently`. A port in a pool outside every range is an orphan: `leeway kill <port>` kills just the listeners on that port, never
+`concurrently`. Run under that same `leeway` run (an agent started as `leeway claude`, a script under `leeway concurrently`), `leeway
+kill` spares the run and itself: it kills the topmost process between the listener and them, watcher included. A listener that is
+itself above `leeway kill`, like a server that runs it, is left running and reported as failed, and the exit code is 1. A port in a pool outside every range is an orphan: `leeway kill <port>` kills just the listeners on that port, never
 their run. Ports outside every range and every pool are refused. `leeway kill --orphans` kills every orphan in every pool the same way,
 exactly the ones `leeway list` shows, and leaves living ranges alone.
 
