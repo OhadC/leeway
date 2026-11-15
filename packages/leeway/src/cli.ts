@@ -6,7 +6,7 @@ import { devPorts } from "./dev-ports.ts";
 import { ExecCommand, type ExecMode, type ExecRequest } from "./cli/exec-command.ts";
 import { FolderRange } from "./registry/folder-range.ts";
 import { ListenerScan, type PortListener } from "./os/listener-scan.ts";
-import { Pools } from "./registry/pools.ts";
+import { type Pool, Pools } from "./registry/pools.ts";
 import { ProcessTree } from "./os/process-tree.ts";
 import { PortHolders } from "./cli/port-holders.ts";
 import { type KillPlan, RangeKill } from "./cli/range-kill.ts";
@@ -164,23 +164,35 @@ function killPlan(entries: RangeEntry[], listeners: PortListener[], arg: string 
 }
 
 async function moveRange(found: FoundConfig): Promise<void> {
-    printClaim(found, await FolderRange.move(found));
+    const claim = await FolderRange.move(found);
+
+    printClaim(found, claim);
+
+    if (claim.previous) {
+        process.stderr.write(newOrphansOrUnchecked(claim.previous));
+    }
+}
+
+function newOrphansOrUnchecked(left: RangeEntry): string {
+    try {
+        return newOrphans(left, RangeRegistry.pools());
+    } catch {
+        return `leeway: could not check ${left.start}-${left.end} for servers still listening\n`;
+    }
 }
 
 async function releaseRange(folder: string | undefined): Promise<void> {
     const pools = RangeRegistry.pools();
     const released = await RangeRegistry.release(folder === undefined ? ConfigFile.find(process.cwd()).folder : path.resolve(folder));
-    const { start, end } = released;
-    const orphans = ListenerScan.listeners().filter(
-        listener => listener.port >= start && listener.port <= end && Pools.holds(pools, listener.port),
-    );
 
-    process.stdout.write(
-        `leeway: released ${start}-${end} for ${released.folder}\n` +
-            orphans
-                .map(({ pid, port }) => `  pid ${pid ?? "?"}  ${port}  still listening, now an orphan; stop it with leeway kill ${port}\n`)
-                .join(""),
-    );
+    process.stdout.write(`leeway: released ${released.start}-${released.end} for ${released.folder}\n` + newOrphans(released, pools));
+}
+
+function newOrphans({ start, end }: RangeEntry, pools: Pool[]): string {
+    return ListenerScan.listeners()
+        .filter(listener => listener.port >= start && listener.port <= end && Pools.holds(pools, listener.port))
+        .map(({ pid, port }) => `  pid ${pid ?? "?"}  ${port}  still listening, now an orphan; stop it with leeway kill ${port}\n`)
+        .join("");
 }
 
 function printPools(): void {
