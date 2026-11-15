@@ -245,7 +245,11 @@ describe("ConfigFile.find", () => {
 
     it("reads a config that starts with a byte order mark, as Windows editors write it", () => {
         const folder = tempFolder();
-        fs.writeFileSync(path.join(folder, "leeway.json"), `﻿${JSON.stringify({ ports: { PORT_WEB: { port: 5173 } } })}`);
+        const byteOrderMark = Buffer.from([0xef, 0xbb, 0xbf]);
+        fs.writeFileSync(
+            path.join(folder, "leeway.json"),
+            Buffer.concat([byteOrderMark, Buffer.from(JSON.stringify({ ports: { PORT_WEB: { port: 5173 } } }))]),
+        );
 
         expect(ConfigFile.find(folder).config.ports).toEqual({ PORT_WEB: { port: 5173 } });
     });
