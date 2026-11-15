@@ -994,6 +994,17 @@ describe("RangeRegistry.claim that changes nothing", () => {
         await expect(claim(registryPath, folder, names, { now: impatientClock(), ...overrides })).rejects.toThrow("waiting for the lock");
     });
 
+    it("writes the registry once a reader holding it open lets go, leaving no temporary file", async () => {
+        const registryPath = createRegistryPath({ version: 1, folders: { "/repo": stored } });
+        const reader = fs.openSync(registryPath, "r");
+        setTimeout(() => fs.closeSync(reader), 200);
+
+        const { entry } = await claim(registryPath, "/new", ["PORT_A"]);
+
+        expect(readRegistry(registryPath).folders["/new"]).toEqual({ start: entry.start, end: entry.end, ports: entry.ports });
+        expect(fs.readdirSync(path.dirname(registryPath))).toEqual(["ranges.json"]);
+    });
+
     it("returns the stored range from a registry folder that refuses writes", async ({ skip }) => {
         const registryPath = createRegistryPath({ version: 1, folders: { "/repo": stored } });
         skip(!WriteRefusingFolder.refuseWrites(path.dirname(registryPath)), WriteRefusingFolder.unsupportedReason);
@@ -1003,13 +1014,17 @@ describe("RangeRegistry.claim that changes nothing", () => {
         expect(entry).toEqual({ folder: "/repo", ...stored });
     });
 
-    it("fails a claim that must write to a registry folder that refuses writes, naming the folder", async ({ skip }) => {
+    it.for<[string, (registryPath: string) => Promise<unknown>]>([
+        ["a claim that must write", registryPath => claim(registryPath, "/new", ["PORT_A"])],
+        ["a release", registryPath => RangeRegistry.release("/repo", "linux", registryPath)],
+        ["a pools change", registryPath => RangeRegistry.setPools(["30000-30999"], registryPath)],
+    ])("fails %s in a registry folder that refuses writes, naming the folder", async ([, write], { skip }) => {
         const registryPath = createRegistryPath({ version: 1, folders: { "/repo": stored } });
         const registryFolder = path.dirname(registryPath);
         skip(!WriteRefusingFolder.refuseWrites(registryFolder), WriteRefusingFolder.unsupportedReason);
 
-        await expect(claim(registryPath, "/new", ["PORT_A"])).rejects.toThrow(
-            `leeway: the registry folder ${registryFolder} refuses writes; allow writes to it, or run leeway env in this folder once outside the sandbox`,
+        await expect(write(registryPath)).rejects.toThrow(
+            `leeway: the registry folder ${registryFolder} refuses writes; allow writes to it, or run the same command once outside the sandbox`,
         );
     });
 });
@@ -1129,9 +1144,14 @@ function heldClaim(registryPath: string, folder: string, overrides: Partial<Clai
     let finish!: () => void;
     const locked = new Promise<void>(resolve => (markLocked = resolve));
     const finished = new Promise<void>(resolve => (finish = resolve));
+    let portTests = 0;
     const testPort = async () => {
-        markLocked();
-        await finished;
+        const isUnlockedPlan = ++portTests === 1;
+
+        if (!isUnlockedPlan) {
+            markLocked();
+            await finished;
+        }
 
         return "free" as const;
     };

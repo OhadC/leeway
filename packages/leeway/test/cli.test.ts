@@ -110,7 +110,21 @@ describe("leeway env --export", () => {
         expect(result.status).toBe(1);
         expect(result.stdout).toBe("");
         expect(result.stderr).toBe(
-            `leeway: the registry folder ${registryFolder} refuses writes; allow writes to it, or run leeway env in this folder once outside the sandbox\n`,
+            `leeway: the registry folder ${registryFolder} refuses writes; allow writes to it, or run the same command once outside the sandbox\n`,
+        );
+    });
+
+    it("fails a release with one leeway line naming the registry folder when it refuses writes", ({ skip }) => {
+        const { dir, home } = temporaryFolder();
+        const registryFolder = path.dirname(RangeRegistry.defaultPath(home));
+        LeewayCli.run(["env", "--export"], dir, home);
+        skip(!WriteRefusingFolder.refuseWrites(registryFolder), WriteRefusingFolder.unsupportedReason);
+
+        const result = LeewayCli.run(["release", dir], dir, home);
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toBe(
+            `leeway: the registry folder ${registryFolder} refuses writes; allow writes to it, or run the same command once outside the sandbox\n`,
         );
     });
 
