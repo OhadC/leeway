@@ -86,11 +86,11 @@ A folder's range comes from the machine's pools, 21000-29999 unless set otherwis
 [`leeway pools`](#leeway-pools-set-start-end--reset), and recorded in the registry, `~/.leeway/ranges.json`. Every repo on the machine
 shares both, so no two folders get the same ports.
 
-- A range is exactly as wide as the catalogue. Reordering or renaming port names moves no port, and neither does adding one while the
+- A range is exactly as wide as the catalogue. Reordering port names or renaming one moves no port, and neither does adding one while the
   wider range fits; removing one moves only the ports that fell outside the narrower range.
-- A folder keeps its range until `leeway move`, or until it no longer fits: it no longer sits inside one pool, the OS won't let it bind
-  one of its ports, or a grown catalogue stretches it onto another folder's range or a new port already in use. Then the range moves to
-  free ports and leeway warns: restart anything still on the old ports.
+- A folder keeps its range until `leeway move`, or until the range no longer fits: it leaves its pool, the OS refuses one of its ports, or
+  a grown catalogue reaches into another folder's range or onto a port in use. Then the range moves to free ports and leeway warns:
+  restart anything still on the old ports.
 - leeway can't tell the folder's own servers from something else on one of its ports, so a claim that finds one in use keeps the range
   and names the holder with the fix: `leeway kill` for a server of this folder that should not still be running, [`leeway move`](#leeway-move) for anything else.
 
