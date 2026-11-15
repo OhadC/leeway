@@ -139,13 +139,14 @@ export class RangeRegistry {
     }
 
     private static async claimChangingNothing(options: ClaimRangeOptions): Promise<RangeClaim | undefined> {
-        const { folder, own, ownKeys, others, current, pools, portTests } = RangeRegistry.survey(options);
+        const { folder, own, ownKeys, others, current, pools } = RangeRegistry.readForClaim(options);
         const [stored, ...otherSpellings] = own;
 
         if (options.move || !current || !stored || otherSpellings.length > 0 || stored[0] !== folder) {
             return undefined;
         }
 
+        const portTests = recordingPortsInUse(options.testPort);
         const kept = await RangeRegistry.keep(current, options.names, RangeRegistry.readableRanges(others), pools, portTests.testPort);
 
         if (!kept || !isDeepStrictEqual(stored[1], { ...ownKeys, ...kept })) {
@@ -172,7 +173,8 @@ export class RangeRegistry {
 
     private static async claimLocked(options: ClaimRangeOptions, write: RegistryWrite): Promise<RangeClaim> {
         const { names, move = false, pathExists } = options;
-        const { folder, registry, ownKeys, others, current, pools, portTests } = RangeRegistry.survey(options);
+        const { folder, registry, ownKeys, others, current, pools } = RangeRegistry.readForClaim(options);
+        const portTests = recordingPortsInUse(options.testPort);
         const keepable = move ? undefined : current;
         const kept =
             keepable && (await RangeRegistry.keep(keepable, names, RangeRegistry.readableRanges(others), pools, portTests.testPort));
@@ -191,7 +193,7 @@ export class RangeRegistry {
         return { entry: { folder, ...range }, previous: current && { folder, ...current }, inUse: portTests.inUse(range.ports) };
     }
 
-    private static survey({ registryPath, folder: folderPath, pinned = {}, platform, testPort }: ClaimRangeOptions) {
+    private static readForClaim({ registryPath, folder: folderPath, pinned = {}, platform }: ClaimRangeOptions) {
         const folder = RangeRegistry.folderKey(folderPath, platform);
         const registry = RangeRegistry.read(registryPath);
         const pools = RangeRegistry.poolsOf(registry, registryPath);
@@ -204,16 +206,7 @@ export class RangeRegistry {
         const [current] = RangeRegistry.readableRanges(own);
         const ownKeys = Object.fromEntries(own.flatMap(([, value]) => (isObject(value) ? Object.entries(value) : [])));
 
-        return {
-            folder,
-            registry,
-            pools,
-            own,
-            ownKeys,
-            others: entries.filter(pair => !isOwn(pair)),
-            current,
-            portTests: recordingPortsInUse(testPort),
-        };
+        return { folder, registry, pools, own, ownKeys, others: entries.filter(pair => !isOwn(pair)), current };
     }
 
     private static refusePinnedInPools(pinned: Record<string, number>, pools: Pool[]): void {

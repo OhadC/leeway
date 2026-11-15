@@ -92,7 +92,7 @@ describe("leeway env --export", () => {
     it("prints the stored range and exits 0 when the registry folder refuses writes", ({ skip }) => {
         const { dir, home } = temporaryFolder();
         const claimed = LeewayCli.run(["env", "--export"], dir, home);
-        skip(!WriteRefusingFolder.refuse(path.dirname(RangeRegistry.defaultPath(home))), WriteRefusingFolder.unsupported);
+        skip(!WriteRefusingFolder.refuseWrites(path.dirname(RangeRegistry.defaultPath(home))), WriteRefusingFolder.unsupportedReason);
 
         const again = LeewayCli.run(["env", "--export"], dir, home);
 
@@ -103,7 +103,7 @@ describe("leeway env --export", () => {
     it("fails a first claim with one leeway line naming the registry folder when it refuses writes", ({ skip }) => {
         const { dir, home } = temporaryFolder();
         const registryFolder = path.dirname(RangeRegistry.defaultPath(home));
-        skip(!WriteRefusingFolder.refuse(registryFolder), WriteRefusingFolder.unsupported);
+        skip(!WriteRefusingFolder.refuseWrites(registryFolder), WriteRefusingFolder.unsupportedReason);
 
         const result = LeewayCli.run(["env", "--export"], dir, home);
 

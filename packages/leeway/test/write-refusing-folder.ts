@@ -3,9 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 export class WriteRefusingFolder {
-    static readonly unsupported = "this user writes to folders whose writes are denied, as the superuser does";
+    static readonly unsupportedReason = "this user writes to folders whose writes are denied, as the superuser does";
 
-    static refuse(dir: string): boolean {
+    static refuseWrites(dir: string): boolean {
         if (process.platform === "win32") {
             WriteRefusingFolder.icacls(dir, "/deny", `${WriteRefusingFolder.everyone}:(W)`);
             WriteRefusingFolder.refused.push(() => WriteRefusingFolder.icacls(dir, "/remove:d", WriteRefusingFolder.everyone));

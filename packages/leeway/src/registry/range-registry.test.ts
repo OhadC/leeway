@@ -996,7 +996,7 @@ describe("RangeRegistry.claim that changes nothing", () => {
 
     it("returns the stored range from a registry folder that refuses writes", async ({ skip }) => {
         const registryPath = createRegistryPath({ version: 1, folders: { "/repo": stored } });
-        skip(!WriteRefusingFolder.refuse(path.dirname(registryPath)), WriteRefusingFolder.unsupported);
+        skip(!WriteRefusingFolder.refuseWrites(path.dirname(registryPath)), WriteRefusingFolder.unsupportedReason);
 
         const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"]);
 
@@ -1006,7 +1006,7 @@ describe("RangeRegistry.claim that changes nothing", () => {
     it("fails a claim that must write to a registry folder that refuses writes, naming the folder", async ({ skip }) => {
         const registryPath = createRegistryPath({ version: 1, folders: { "/repo": stored } });
         const registryFolder = path.dirname(registryPath);
-        skip(!WriteRefusingFolder.refuse(registryFolder), WriteRefusingFolder.unsupported);
+        skip(!WriteRefusingFolder.refuseWrites(registryFolder), WriteRefusingFolder.unsupportedReason);
 
         await expect(claim(registryPath, "/new", ["PORT_A"])).rejects.toThrow(
             `leeway: the registry folder ${registryFolder} refuses writes; allow writes to it, or run leeway env in this folder once outside the sandbox`,
