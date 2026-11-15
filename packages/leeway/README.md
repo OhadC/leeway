@@ -74,7 +74,8 @@ Some ports should not move per folder: a local Postgres, or another repo's dev s
 A pinned port keeps its `port` in every folder and every mode. leeway hands it down like any port, in the environment, `{{PORT_DB}}` and
 `{{LEEWAY_ENV}}`, and marks it `pinned` in its table. It is never part of a range: the agent guard ignores it, and `leeway list` and
 `leeway kill` never reach it. A pinned port inside one of the machine's pools is refused, since `leeway kill --orphans` would kill it
-there. A name can't be in both `ports` and `pinned`. For a worktree that needs its own copy, move the entry to `ports` there without
+there. A name can't be in both `ports` and `pinned`, and a pinned port can't equal a catalogue entry's `port`, since default ports
+would hand both names the same port. For a worktree that needs its own copy, move the entry to `ports` there without
 committing it; its next claim grows the range by one.
 
 leeway finds the config by walking up from the current directory; the nearest `leeway.json` wins, and the folder holding it is the

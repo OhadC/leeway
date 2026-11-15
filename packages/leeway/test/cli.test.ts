@@ -199,15 +199,16 @@ describe("leeway env", () => {
     it("names nothing for a pinned port or a default port in use", async () => {
         const { dir, home } = temporaryFolder();
         const port = await listeningPort(startSquatter());
+        const pinnedPort = await listeningPort(startSquatter());
         fs.writeFileSync(
             path.join(dir, "leeway.json"),
-            JSON.stringify({ ports: { PORT_WEB: { port }, PORT_API: { port: 3001 } }, pinned: { PORT_DB: { port } } }),
+            JSON.stringify({ ports: { PORT_WEB: { port }, PORT_API: { port: 3001 } }, pinned: { PORT_DB: { port: pinnedPort } } }),
         );
 
         const claimed = LeewayCli.run(["env"], dir, home);
         const defaults = LeewayCli.run(["--default", "node", "-e", ""], dir, home);
 
-        expect(claimed.stdout).toContain(`PORT_DB=${port}
+        expect(claimed.stdout).toContain(`PORT_DB=${pinnedPort}
 `);
         expect(claimed.stderr).not.toContain("in use");
         expect(defaults.stderr).toContain(`PORT_WEB  ${port}

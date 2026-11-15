@@ -90,7 +90,7 @@ export class ConfigFile {
         }
 
         ConfigFile.checkCaseClash([...Object.keys(content.ports), ...Object.keys(pinned)], file);
-        ConfigFile.checkSharedPort(content.ports as LeewayConfig["ports"], file);
+        ConfigFile.checkSharedPort(content.ports as LeewayConfig["ports"], pinned as LeewayConfig["ports"], file);
 
         return content as LeewayConfig;
     }
@@ -111,17 +111,19 @@ export class ConfigFile {
         }
     }
 
-    private static checkSharedPort(ports: LeewayConfig["ports"], file: string): void {
-        const seen = new Map<number, string>();
+    private static checkSharedPort(ports: LeewayConfig["ports"], pinned: LeewayConfig["ports"], file: string): void {
+        const defaultPorts = new Map<number, string>();
 
-        for (const [name, { port }] of Object.entries(ports)) {
-            const clash = seen.get(port);
+        for (const [name, { port }] of [...Object.entries(ports), ...Object.entries(pinned)]) {
+            const clash = defaultPorts.get(port);
 
             if (clash !== undefined) {
                 throw new Error(`leeway: ${clash} and ${name} in ${file} both have port ${port}`);
             }
 
-            seen.set(port, name);
+            if (Object.hasOwn(ports, name)) {
+                defaultPorts.set(port, name);
+            }
         }
     }
 
@@ -148,7 +150,7 @@ export class ConfigFile {
     }
 
     private static readJson(file: string): unknown {
-        const text = fs.readFileSync(file, "utf8");
+        const text = fs.readFileSync(file, "utf8").replace(/^﻿/, "");
 
         try {
             return JSON.parse(text);
