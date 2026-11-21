@@ -1,6 +1,6 @@
 {
     "$schema": "https://unpkg.com/knip@6/schema.json",
-    "ignoreBinaries": ["podman"],
+    "ignoreBinaries": ["podman", "icacls"],
     "workspaces": {
         "examples/playground": {
             "entry": ["server.ts"]

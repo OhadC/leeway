@@ -390,6 +390,20 @@ Windows and `leeway pools set 25000-29999` in WSL.
 **Other agents** (Codex, Gemini CLI, Cursor, Copilot, Aider, ...): tell them in `AGENTS.md` to start servers with
 `leeway <command>`. Where the agent sets a marker, turning on the agent guard catches the times it forgets.
 
+**Sandboxes**: a claim that changes nothing only reads `~/.leeway`; anything else writes to it. A sandbox that limits writes to the
+working folder makes those writes fail, naming the folder. Allow writes to it, in Claude Code with `sandbox.filesystem.allowWrite`, or run
+the same command once outside the sandbox:
+
+```json
+{
+    "sandbox": {
+        "filesystem": { "allowWrite": ["~/.leeway"] }
+    }
+}
+```
+
+On Linux the folder must exist for that entry to apply: `mkdir -p ~/.leeway` first.
+
 ## Recipes
 
 ### Turbo
