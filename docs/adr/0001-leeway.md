@@ -102,7 +102,8 @@ shell line with it fails rather than lose its quotes.
 **Environment variables are the transport.** They pass through `concurrently`, `tsx`, package scripts and shells to every child process
 with no integration. `leeway` runs the command through the system shell: one argument is a shell line, several are an argv quoted for
 the shell. Stopping leeway stops the tree: on POSIX the command gets its own process group and SIGINT, SIGTERM, SIGHUP and SIGQUIT are
-forwarded to it; on Windows, which has no process groups to signal, Ctrl+C, Ctrl+Break and console close run `taskkill /T /F`.
+forwarded to it, and SIGWINCH too so a resize reaches it; on Windows, which has no process groups to signal, Ctrl+C, Ctrl+Break and
+console close run `taskkill /T /F`.
 
 **Browser and vite.** `devPorts` is browser-safe. `leeway/vite` sets `server.port` and `preview.port` with `strictPort`, so a taken port
 fails instead of drifting. `preview.port` uses the dev server's port name unless `preview` names another: left alone, vite previews on

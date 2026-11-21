@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { Pools } from "../src/registry/pools.ts";
@@ -12,6 +13,9 @@ const SERVER =
     "require('node:http').createServer((q, s) => s.end('ok')).listen(process.env.PORT_WEB, () => console.log('listening ' + process.env.PORT_WEB))";
 
 const PRINT_PORTS = "console.log('argument ' + process.argv[1] + ', env ' + process.env.PORT_WEB + ' ' + process.env.PORT_API)";
+
+const RESIZE_WAITER =
+    "process.on('SIGWINCH', () => { console.log('resized'); process.exit(0); }); console.log('listening 0'); setInterval(() => {}, 1000);";
 
 const FIXTURES = {
     "launcher.mjs": `import { spawn } from "node:child_process";
@@ -301,6 +305,15 @@ describe("leeway <command>", () => {
 
         expect(LeewayCli.run(["--", "node", "-e", "process.exit(7)"], dir, home).status).toBe(7);
         expect(LeewayCli.run(["node", "-e", "process.exit(0)"], dir, home).status).toBe(0);
+    });
+
+    it("gives the command its port over a parent variable whose name differs only in case", () => {
+        const { dir, home } = temporaryFolder();
+        fs.writeFileSync(path.join(dir, "leeway.json"), JSON.stringify({ ports: { port_web: { port: 5173 } } }));
+
+        const result = LeewayCli.run(["--default", "node", "-e", "console.log(process.env.port_web)"], dir, home, { PORT_WEB: "9999" });
+
+        expect(result.stdout).toBe("5173\n");
     });
 
     it("gives the command the claimed ports, and its server answers on one", async () => {
@@ -606,7 +619,7 @@ describe("leeway errors", () => {
 
 describe.skipIf(process.platform === "win32")("leeway <command> on a signal", () => {
     it.each(["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const)(
-        "%s stops the whole command tree, so nothing is left listening",
+        "%s stops the whole command tree, so nothing is left listening, and exits 128 plus the signal number",
         async signal => {
             const { dir, home } = temporaryFolder();
             const leeway = startLeeway(["node", "launcher.mjs"], dir, home);
@@ -617,10 +630,21 @@ describe.skipIf(process.platform === "win32")("leeway <command> on a signal", ()
 
             leeway.kill(signal);
 
-            expect(await exitCode).not.toBe(0);
+            expect(await exitCode).toBe(128 + os.constants.signals[signal]);
             expect(await stopsAnswering(port)).toBe(true);
         },
     );
+
+    it("hands SIGWINCH to the command, so a TUI redraws on a terminal resize", async () => {
+        const { dir, home } = temporaryFolder();
+        const leeway = startLeeway(["node", "-e", RESIZE_WAITER], dir, home);
+        const result = finished(leeway);
+
+        await listeningPort(leeway);
+        leeway.kill("SIGWINCH");
+
+        expect(await result).toEqual({ code: 0, stdout: "listening 0\nresized\n" });
+    });
 });
 
 describe.runIf(process.platform === "win32")("leeway <command> on Ctrl+C in its console", () => {
