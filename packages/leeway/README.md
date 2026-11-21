@@ -327,6 +327,17 @@ Claims this folder a new range sharing no port with its current one, for when so
 ports and the moved warning, and kills nothing: restart the folder's servers so they take the new ports. A folder without a range gets a
 plain claim.
 
+Whatever still listens on the old range keeps running as an orphan, which `leeway kill` in the folder no longer reaches: the folder's own
+servers, and the process that held the port. leeway can't tell them apart, so `leeway move` names each one with the command that stops it,
+for the ones that are yours to stop:
+
+```
+leeway: range moved from 21000-21001 to 21002-21003; restart anything still using the old ports
+  pid 5120  21000  still listening; if it's this folder's, stop it with leeway kill 21000
+```
+
+If it can't scan for them, it says so instead; the range has moved all the same.
+
 ### `leeway release [<folder>]`
 
 Drops this folder's range from the registry, or with a path, that folder's (with or without a `leeway.json`, existing or not), so its

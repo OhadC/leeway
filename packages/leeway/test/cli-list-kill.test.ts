@@ -293,6 +293,35 @@ describe("leeway release", () => {
     }, 60_000);
 });
 
+describe("leeway move", () => {
+    it("names what still listens on the old range, with the kill that stops it", async () => {
+        const { dir, home, ports } = claimedFolder();
+        const server = await startServer(ports.PORT_WEB);
+
+        const moved = LeewayCli.run(["move"], dir, home);
+        const killed = LeewayCli.run(["kill", String(ports.PORT_WEB)], dir, home);
+
+        expect(moved.status).toBe(0);
+        expect(moved.stderr).toMatch(
+            new RegExp(
+                `\\n  pid ${server.pid}  ${ports.PORT_WEB}  still listening; if it's this folder's, stop it with leeway kill ${ports.PORT_WEB}\\n$`,
+            ),
+        );
+        expect(killed.status).toBe(0);
+        expect(await Listeners.accepts(ports.PORT_WEB)).toBe(false);
+    }, 60_000);
+
+    it("names nothing when nothing listens on the old range", () => {
+        const { dir, home, ports } = claimedFolder();
+
+        const moved = LeewayCli.run(["move"], dir, home);
+
+        expect(moved.status).toBe(0);
+        expect(moved.stderr).toMatch(/restart anything still using the old ports\n$/);
+        expect(moved.stderr).not.toContain(`leeway kill ${ports.PORT_WEB}`);
+    }, 60_000);
+});
+
 function claimedFolder() {
     const folder = LeewayCli.folder();
     const ports = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], folder.dir, folder.home).stdout);
