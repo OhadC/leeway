@@ -42,7 +42,13 @@ export class ProcessTree {
         const failures = new Map<number, string>();
 
         pids.forEach(pid => {
-            const top = ProcessTree.leewayRunOf(pid, rows) ?? pid;
+            const top = ProcessTree.killTopOf(pid, rows, process.pid);
+
+            if (top === undefined) {
+                failures.set(pid, "above this leeway kill");
+
+                return;
+            }
 
             if (killed.has(top)) {
                 return;
@@ -89,20 +95,24 @@ export class ProcessTree {
         return tree;
     }
 
-    static leewayRunOf(pid: number, rows: ProcessRow[]): number | undefined {
-        const byPid = new Map(rows.map(row => [row.pid, row]));
-        const visited = new Set([pid]);
+    static killTopOf(pid: number, rows: ProcessRow[], killPid: number): number | undefined {
+        const aboveKill = new Set(ProcessTree.ancestorsOf(killPid, rows).map(row => row.pid));
 
-        for (let current = byPid.get(pid); current && !visited.has(current.parent);) {
-            visited.add(current.parent);
-            current = byPid.get(current.parent);
-
-            if (current && LEEWAY_RUN.test(current.commandLine)) {
-                return current.pid;
-            }
+        if (aboveKill.has(pid)) {
+            return undefined;
         }
 
-        return undefined;
+        const run = ProcessTree.leewayRunOf(pid, rows);
+
+        if (run === undefined || !aboveKill.has(run)) {
+            return run ?? pid;
+        }
+
+        return ProcessTree.ancestorsOf(pid, rows).findLast(row => !aboveKill.has(row.pid))?.pid ?? pid;
+    }
+
+    static leewayRunOf(pid: number, rows: ProcessRow[]): number | undefined {
+        return ProcessTree.ancestorsOf(pid, rows).find(row => LEEWAY_RUN.test(row.commandLine))?.pid;
     }
 
     static signalGroup(leaderPid: number, signal: NodeJS.Signals): void {
@@ -122,6 +132,23 @@ export class ProcessTree {
             parent: (started.get(row.parent) ?? Infinity) <= row.started ? row.parent : 0,
             commandLine: row.commandLine ?? "",
         }));
+    }
+
+    private static ancestorsOf(pid: number, rows: ProcessRow[]): ProcessRow[] {
+        const byPid = new Map(rows.map(row => [row.pid, row]));
+        const ancestors: ProcessRow[] = [];
+        const visited = new Set([pid]);
+
+        for (let current = byPid.get(pid); current && !visited.has(current.parent);) {
+            visited.add(current.parent);
+            current = byPid.get(current.parent);
+
+            if (current) {
+                ancestors.push(current);
+            }
+        }
+
+        return ancestors;
     }
 
     private static isRunning(pid: number): boolean {

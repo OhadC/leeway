@@ -108,6 +108,32 @@ describe("ProcessTree.leewayRunOf", () => {
     });
 });
 
+describe("ProcessTree.killTopOf", () => {
+    const KILL_UNDER_RUN_100: ProcessRow[] = [
+        { pid: 60, parent: 100, commandLine: "sh -c leeway kill" },
+        { pid: 61, parent: 60, commandLine: "node /home/me/app/node_modules/leeway/dist/cli.mjs kill" },
+    ];
+
+    it("kills the leeway run above a listener when this leeway kill is not under it", () => {
+        expect(ProcessTree.killTopOf(31, [...psRows(), ...KILL_UNDER_RUN_100], 999)).toBe(100);
+        expect(ProcessTree.killTopOf(201, [...psRows(), ...KILL_UNDER_RUN_100], 61)).toBe(200);
+    });
+
+    it("kills a listener with no leeway run above it on its own", () => {
+        expect(ProcessTree.killTopOf(720, windowsRows(), 999)).toBe(720);
+    });
+
+    it("kills the watcher under the run that this leeway kill shares, sparing the run", () => {
+        expect(ProcessTree.killTopOf(31, [...psRows(), ...KILL_UNDER_RUN_100], 61)).toBe(50);
+    });
+
+    it("kills nothing for a listener above this leeway kill", () => {
+        const rows: ProcessRow[] = [...psRows(), { pid: 70, parent: 31, commandLine: "node node_modules/.bin/leeway kill" }];
+
+        expect(ProcessTree.killTopOf(31, rows, 70)).toBeUndefined();
+    });
+});
+
 describe("ProcessTree.killTree", () => {
     it("ends a running process together with its descendants", async () => {
         const parent = spawn(process.execPath, ["-e", PARENT_OF_A_SLEEPER], { stdio: ["ignore", "pipe", "inherit"] });
