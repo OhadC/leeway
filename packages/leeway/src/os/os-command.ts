@@ -10,6 +10,8 @@ export type CommandResult =
 
 export type CommandRunner = (file: string, args: readonly string[]) => CommandResult;
 
+const UTF8_OUTPUT = "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false";
+
 const PACKAGE_OF_TOOL: Record<string, string> = { ss: "iproute2", ps: "procps" };
 
 export class OsCommand {
@@ -34,7 +36,7 @@ export class OsCommand {
     }
 
     static powershell(run: CommandRunner, script: string): string {
-        return OsCommand.output(run, "powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script]);
+        return OsCommand.output(run, "powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `${UTF8_OUTPUT}; ${script}`]);
     }
 
     private static failure(file: string, result: CommandResult): string {

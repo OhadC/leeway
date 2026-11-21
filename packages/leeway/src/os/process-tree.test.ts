@@ -63,6 +63,25 @@ describe("ProcessTree.rows", () => {
         expect(() => ProcessTree.rows("linux", busyBox)).toThrow(/^leeway: install procps for ps$/);
     });
 
+    it.runIf(process.platform === "win32")(
+        "reads a non-ASCII command line through powershell",
+        async () => {
+            const sleeper = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)", "héllo-שלום"], { stdio: "ignore" });
+
+            try {
+                await vi.waitFor(
+                    () => expect(ProcessTree.rows().find(row => row.pid === sleeper.pid)?.commandLine).toMatch(/héllo-שלום$/),
+                    {
+                        timeout: 10_000,
+                    },
+                );
+            } finally {
+                sleeper.kill();
+            }
+        },
+        15_000,
+    );
+
     it("reads windows processes, dropping a parent pid that is gone or was reused by a later process", () => {
         expect(windowsRows()).toEqual([
             { pid: 4, parent: 0, commandLine: "" },
@@ -179,6 +198,30 @@ describe("ProcessTree.killTree", () => {
     });
 });
 
+describe("ProcessTree.killEach", () => {
+    it("signals every pid past one it may not kill, then throws that refusal", () => {
+        const signalled: number[] = [];
+        const refuse = (pid: number) => {
+            signalled.push(pid);
+
+            if (pid === 50) {
+                throw killError("EPERM");
+            }
+        };
+
+        expect(() => ProcessTree.killEach([100, 50, 30], refuse)).toThrow("kill EPERM");
+        expect(signalled).toEqual([100, 50, 30]);
+    });
+
+    it("passes over a pid that is already gone", () => {
+        const gone = () => {
+            throw killError("ESRCH");
+        };
+
+        expect(() => ProcessTree.killEach([100, 50], gone)).not.toThrow();
+    });
+});
+
 describe("ProcessTree.killTrees", () => {
     it("kills a parent and its child listed side by side without reporting the child, already gone, as a failure", async () => {
         const parent = spawn(process.execPath, ["-e", PARENT_OF_A_SLEEPER], { stdio: ["ignore", "pipe", "inherit"] });
@@ -214,4 +257,11 @@ function isRunning(pid: number): boolean {
     } catch {
         return false;
     }
+}
+
+function killError(code: string): NodeJS.ErrnoException {
+    const error: NodeJS.ErrnoException = new Error(`kill ${code}`);
+    error.code = code;
+
+    return error;
 }
