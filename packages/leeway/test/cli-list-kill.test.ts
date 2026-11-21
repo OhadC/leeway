@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -349,6 +349,34 @@ describe("leeway move", () => {
         expect(moved.status).toBe(0);
         expect(moved.stderr).toMatch(/restart anything still using the old ports\n$/);
         expect(moved.stderr).not.toContain(`leeway kill ${ports.PORT_WEB}`);
+    }, 60_000);
+});
+
+describe.runIf(process.platform === "linux")("leeway list and kill without the linux scan tools", () => {
+    it("names iproute2 when ss is not on PATH, while a claim still works", () => {
+        const { dir, home } = LeewayCli.folder();
+        const emptyPath = { PATH: LeewayCli.temporaryDir("leeway-path-") };
+
+        const claimed = LeewayCli.run(["env"], dir, home, emptyPath);
+        const listed = LeewayCli.run(["list"], dir, home, emptyPath);
+        const killed = LeewayCli.run(["kill"], dir, home, emptyPath);
+
+        expect(claimed.status).toBe(0);
+        expect([listed.status, listed.stderr]).toEqual([1, "leeway: install iproute2 for ss\n"]);
+        expect([killed.status, killed.stderr]).toEqual([1, "leeway: install iproute2 for ss\n"]);
+    });
+
+    it("names procps when ss is on PATH but ps is not", async () => {
+        const { dir, home, ports } = claimedFolder();
+        const pathDir = LeewayCli.temporaryDir("leeway-path-");
+        await startServer(ports.PORT_WEB);
+        fs.symlinkSync(spawnSync("sh", ["-c", "command -v ss"], { encoding: "utf8" }).stdout.trim(), path.join(pathDir, "ss"));
+
+        const listed = LeewayCli.run(["list"], dir, home, { PATH: pathDir });
+        const killed = LeewayCli.run(["kill"], dir, home, { PATH: pathDir });
+
+        expect([listed.status, listed.stderr]).toEqual([1, "leeway: install procps for ps\n"]);
+        expect([killed.status, killed.stderr]).toEqual([1, "leeway: install procps for ps\n"]);
     }, 60_000);
 });
 

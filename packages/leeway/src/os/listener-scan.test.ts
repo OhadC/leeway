@@ -103,6 +103,10 @@ describe("ListenerScan.listeners", () => {
         expect(() => ListenerScan.listeners("linux", failed)).toThrow("leeway: ss failed: Cannot open netlink socket: Permission denied");
     });
 
+    it("names the package to install when ss is not on PATH", () => {
+        expect(() => ListenerScan.listeners("linux", () => ({ status: "not found" }))).toThrow(/^leeway: install iproute2 for ss$/);
+    });
+
     it("finds a real server this process listens with in the pool", async () => {
         const server = await listenInPool();
 

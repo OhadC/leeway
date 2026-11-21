@@ -530,6 +530,8 @@ eval "$(npx leeway env --export)"
   command in the background and stop it with its own stop command.
 - A port can be taken between the claim and your server binding it. `strictPort` and bind errors make that a loud failure, not a silent
   drift; `leeway move` gets the folder a new range.
+- On Linux, `leeway list`, `leeway kill` and `leeway release` need `ss` (package `iproute2`), and `leeway list` and `leeway kill` need
+  `ps` (package `procps`; BusyBox `ps` won't do).
 - Pools are never compacted, so they can fragment. When no pool has room, the claim fails with a message naming every pool; release unused
   folders' ranges with `leeway release <folder>`.
 - leeway before 0.3 ignores pools: a repo on an older version still claims in 21000-29999, whatever `leeway pools set` says.

@@ -17,6 +17,19 @@ const PS_TABLE = [
     "",
 ].join("\n");
 
+const BUSYBOX_PS_REFUSAL = [
+    "ps: unrecognized option: w",
+    "BusyBox v1.37.0 (2026-01-10 15:38:28 UTC) multi-call binary.",
+    "",
+    "Usage: ps [-o COL1,COL2=HEADER] [-T]",
+    "",
+    "Show list of processes",
+    "",
+    "\t-o COL1,COL2=HEADER\tSelect columns for display",
+    "\t-T\t\t\tShow threads",
+    "",
+].join("\n");
+
 const WINDOWS_LEEWAY = String.raw`"C:\Program Files\nodejs\node.exe" C:\app\node_modules\leeway\dist\cli.mjs tsx watch`;
 
 const WINDOWS_JSON = JSON.stringify([
@@ -38,6 +51,16 @@ describe("ProcessTree.rows", () => {
             { pid: 50, parent: 100, commandLine: "sh -c tsx watch src/main.ts" },
             { pid: 120, parent: 100, commandLine: "" },
         ]);
+    });
+
+    it("names the package to install when ps is not on PATH", () => {
+        expect(() => ProcessTree.rows("linux", () => ({ status: "not found" }))).toThrow(/^leeway: install procps for ps$/);
+    });
+
+    it("names the package to install when ps is BusyBox's, which rejects -ww", () => {
+        const busyBox = () => ({ status: 1, stdout: "", stderr: BUSYBOX_PS_REFUSAL });
+
+        expect(() => ProcessTree.rows("linux", busyBox)).toThrow(/^leeway: install procps for ps$/);
     });
 
     it("reads windows processes, dropping a parent pid that is gone or was reused by a later process", () => {
