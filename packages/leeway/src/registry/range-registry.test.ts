@@ -3,11 +3,13 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { WriteRefusingFolder } from "../../test/write-refusing-folder.ts";
 import { RangeRegistry, type ClaimRangeOptions, type PortBindState, type RangeEntry } from "./range-registry.ts";
 
 const cleanups: (() => void)[] = [];
 
 afterEach(() => {
+    WriteRefusingFolder.allowAgain();
     cleanups.splice(0).forEach(cleanup => cleanup());
 });
 
@@ -953,6 +955,80 @@ describe("RangeRegistry.claim lock", () => {
     });
 });
 
+describe("RangeRegistry.claim that changes nothing", () => {
+    const stored = { start: 21010, end: 21011, ports: { PORT_A: 21010, PORT_B: 21011 } };
+
+    it("returns the stored range and its ports in use without the lock, leaving the registry untouched", async () => {
+        const deleted = { start: 21000, end: 21000, ports: { PORT_X: 21000 } };
+        const registryPath = createRegistryPath({ version: 1, folders: { "/deleted": deleted, "/repo": stored } });
+        const before = registryFileState(registryPath);
+        holdLockUnbreakably(registryPath);
+
+        const claimed = await claim(registryPath, "/repo", ["PORT_B", "PORT_A"], {
+            pathExists: candidate => candidate !== "/deleted",
+            testPort: portStates({ 21010: "in-use" }),
+            now: impatientClock(),
+        });
+
+        expect(claimed).toEqual({
+            entry: { folder: "/repo", ...stored },
+            previous: { folder: "/repo", ...stored },
+            inUse: { PORT_A: 21010 },
+        });
+        expect(registryFileState(registryPath)).toEqual(before);
+    });
+
+    it.each<[string, string, string[], Partial<ClaimRangeOptions>]>([
+        ["a catalogue change", "/repo", ["PORT_A", "PORT_B", "PORT_C"], {}],
+        ["a move", "/repo", ["PORT_A", "PORT_B"], { move: true }],
+        ["a range whose port became unavailable", "/repo", ["PORT_A", "PORT_B"], { testPort: portStates({ 21011: "unavailable" }) }],
+        ["a first claim", "/new", ["PORT_A"], {}],
+        ["an entry stored under another spelling of the folder", "/spelled", ["PORT_A", "PORT_B"], {}],
+    ])("still takes the lock for %s", async (_, folder, names, overrides) => {
+        const registryPath = createRegistryPath({
+            version: 1,
+            folders: { "/repo": stored, "/spelled/": { ...stored, start: 21020, end: 21021, ports: { PORT_A: 21020, PORT_B: 21021 } } },
+        });
+        holdLockUnbreakably(registryPath);
+
+        await expect(claim(registryPath, folder, names, { now: impatientClock(), ...overrides })).rejects.toThrow("waiting for the lock");
+    });
+
+    it("writes the registry once a reader holding it open lets go, leaving no temporary file", async () => {
+        const registryPath = createRegistryPath({ version: 1, folders: { "/repo": stored } });
+        const reader = fs.openSync(registryPath, "r");
+        setTimeout(() => fs.closeSync(reader), 200);
+
+        const { entry } = await claim(registryPath, "/new", ["PORT_A"]);
+
+        expect(readRegistry(registryPath).folders["/new"]).toEqual({ start: entry.start, end: entry.end, ports: entry.ports });
+        expect(fs.readdirSync(path.dirname(registryPath))).toEqual(["ranges.json"]);
+    });
+
+    it("returns the stored range from a registry folder that refuses writes", async ({ skip }) => {
+        const registryPath = createRegistryPath({ version: 1, folders: { "/repo": stored } });
+        skip(!WriteRefusingFolder.refuseWrites(path.dirname(registryPath)), WriteRefusingFolder.unsupportedReason);
+
+        const { entry } = await claim(registryPath, "/repo", ["PORT_A", "PORT_B"]);
+
+        expect(entry).toEqual({ folder: "/repo", ...stored });
+    });
+
+    it.for<[string, (registryPath: string) => Promise<unknown>]>([
+        ["a claim that must write", registryPath => claim(registryPath, "/new", ["PORT_A"])],
+        ["a release", registryPath => RangeRegistry.release("/repo", "linux", registryPath)],
+        ["a pools change", registryPath => RangeRegistry.setPools(["30000-30999"], registryPath)],
+    ])("fails %s in a registry folder that refuses writes, naming the folder", async ([, write], { skip }) => {
+        const registryPath = createRegistryPath({ version: 1, folders: { "/repo": stored } });
+        const registryFolder = path.dirname(registryPath);
+        skip(!WriteRefusingFolder.refuseWrites(registryFolder), WriteRefusingFolder.unsupportedReason);
+
+        await expect(write(registryPath)).rejects.toThrow(
+            `leeway: the registry folder ${registryFolder} refuses writes; allow writes to it, or run the same command once outside the sandbox`,
+        );
+    });
+});
+
 describe("RangeRegistry.testPort", () => {
     it("reports a port with a loopback listener as in use, and the same port free once the listener closes", async () => {
         const server = net.createServer();
@@ -1068,14 +1144,33 @@ function heldClaim(registryPath: string, folder: string, overrides: Partial<Clai
     let finish!: () => void;
     const locked = new Promise<void>(resolve => (markLocked = resolve));
     const finished = new Promise<void>(resolve => (finish = resolve));
+    let portTests = 0;
     const testPort = async () => {
-        markLocked();
-        await finished;
+        const isUnlockedPlan = ++portTests === 1;
+
+        if (!isUnlockedPlan) {
+            markLocked();
+            await finished;
+        }
 
         return "free" as const;
     };
 
     return { locked, finish, claimed: claim(registryPath, folder, ["PORT_A"], { testPort, ...overrides }) };
+}
+
+function holdLockUnbreakably(registryPath: string): void {
+    fs.mkdirSync(path.join(`${registryPath}.lock`, "held", "unbreakable"), { recursive: true });
+}
+
+function impatientClock(): ClaimRangeOptions["now"] {
+    let clock = Date.now();
+
+    return () => (clock += 11_000);
+}
+
+function registryFileState(registryPath: string) {
+    return { contents: fs.readFileSync(registryPath, "utf8"), modifiedAt: fs.statSync(registryPath).mtimeMs };
 }
 
 function settledFlag<T>(promise: Promise<T>) {

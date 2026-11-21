@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { Pools } from "../src/registry/pools.ts";
 import { type RangeEntry, RangeRegistry } from "../src/registry/range-registry.ts";
 import { LeewayCli } from "./leeway-cli.ts";
+import { WriteRefusingFolder } from "./write-refusing-folder.ts";
 
 const SERVER =
     "require('node:http').createServer((q, s) => s.end('ok')).listen(process.env.PORT_WEB, () => console.log('listening ' + process.env.PORT_WEB))";
@@ -33,6 +34,7 @@ const ownConsoleLeeways: { pid: number; dir: string }[] = [];
 afterEach(async () => {
     await Promise.all(runningLeeways.splice(0).map(stopLeeway));
     ownConsoleLeeways.splice(0).forEach(stopOwnConsoleLeeway);
+    WriteRefusingFolder.allowAgain();
     LeewayCli.removeTemporaryDirs();
 });
 
@@ -85,6 +87,45 @@ describe("leeway env --export", () => {
         );
         expect(LeewayCli.claimedFolders(home)).toEqual([]);
         expect(defaults.stdout).toBe(`${pinnedPort}\n`);
+    });
+
+    it("prints the stored range and exits 0 when the registry folder refuses writes", ({ skip }) => {
+        const { dir, home } = temporaryFolder();
+        const claimed = LeewayCli.run(["env", "--export"], dir, home);
+        skip(!WriteRefusingFolder.refuseWrites(path.dirname(RangeRegistry.defaultPath(home))), WriteRefusingFolder.unsupportedReason);
+
+        const again = LeewayCli.run(["env", "--export"], dir, home);
+
+        expect(again.status).toBe(0);
+        expect(again.stdout).toBe(claimed.stdout);
+    });
+
+    it("fails a first claim with one leeway line naming the registry folder when it refuses writes", ({ skip }) => {
+        const { dir, home } = temporaryFolder();
+        const registryFolder = path.dirname(RangeRegistry.defaultPath(home));
+        skip(!WriteRefusingFolder.refuseWrites(registryFolder), WriteRefusingFolder.unsupportedReason);
+
+        const result = LeewayCli.run(["env", "--export"], dir, home);
+
+        expect(result.status).toBe(1);
+        expect(result.stdout).toBe("");
+        expect(result.stderr).toBe(
+            `leeway: the registry folder ${registryFolder} refuses writes; allow writes to it, or run the same command once outside the sandbox\n`,
+        );
+    });
+
+    it("fails a release with one leeway line naming the registry folder when it refuses writes", ({ skip }) => {
+        const { dir, home } = temporaryFolder();
+        const registryFolder = path.dirname(RangeRegistry.defaultPath(home));
+        LeewayCli.run(["env", "--export"], dir, home);
+        skip(!WriteRefusingFolder.refuseWrites(registryFolder), WriteRefusingFolder.unsupportedReason);
+
+        const result = LeewayCli.run(["release", dir], dir, home);
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toBe(
+            `leeway: the registry folder ${registryFolder} refuses writes; allow writes to it, or run the same command once outside the sandbox\n`,
+        );
     });
 
     it("warns on stderr when the range had to move since the last claim", () => {
@@ -199,15 +240,16 @@ describe("leeway env", () => {
     it("names nothing for a pinned port or a default port in use", async () => {
         const { dir, home } = temporaryFolder();
         const port = await listeningPort(startSquatter());
+        const pinnedPort = await listeningPort(startSquatter());
         fs.writeFileSync(
             path.join(dir, "leeway.json"),
-            JSON.stringify({ ports: { PORT_WEB: { port }, PORT_API: { port: 3001 } }, pinned: { PORT_DB: { port } } }),
+            JSON.stringify({ ports: { PORT_WEB: { port }, PORT_API: { port: 3001 } }, pinned: { PORT_DB: { port: pinnedPort } } }),
         );
 
         const claimed = LeewayCli.run(["env"], dir, home);
         const defaults = LeewayCli.run(["--default", "node", "-e", ""], dir, home);
 
-        expect(claimed.stdout).toContain(`PORT_DB=${port}
+        expect(claimed.stdout).toContain(`PORT_DB=${pinnedPort}
 `);
         expect(claimed.stderr).not.toContain("in use");
         expect(defaults.stderr).toContain(`PORT_WEB  ${port}
@@ -563,19 +605,22 @@ describe("leeway errors", () => {
 });
 
 describe.skipIf(process.platform === "win32")("leeway <command> on a signal", () => {
-    it.each(["SIGINT", "SIGTERM", "SIGHUP"] as const)("%s stops the whole command tree, so nothing is left listening", async signal => {
-        const { dir, home } = temporaryFolder();
-        const leeway = startLeeway(["node", "launcher.mjs"], dir, home);
-        const port = await listeningPort(leeway);
-        const exitCode = new Promise(resolve => leeway.once("exit", resolve));
+    it.each(["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const)(
+        "%s stops the whole command tree, so nothing is left listening",
+        async signal => {
+            const { dir, home } = temporaryFolder();
+            const leeway = startLeeway(["node", "launcher.mjs"], dir, home);
+            const port = await listeningPort(leeway);
+            const exitCode = new Promise(resolve => leeway.once("exit", resolve));
 
-        expect(await answers(port)).toBe(true);
+            expect(await answers(port)).toBe(true);
 
-        leeway.kill(signal);
+            leeway.kill(signal);
 
-        expect(await exitCode).not.toBe(0);
-        expect(await stopsAnswering(port)).toBe(true);
-    });
+            expect(await exitCode).not.toBe(0);
+            expect(await stopsAnswering(port)).toBe(true);
+        },
+    );
 });
 
 describe.runIf(process.platform === "win32")("leeway <command> on Ctrl+C in its console", () => {

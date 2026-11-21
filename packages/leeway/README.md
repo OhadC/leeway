@@ -74,7 +74,7 @@ Some ports should not move per folder: a local Postgres, or another repo's dev s
 A pinned port keeps its `port` in every folder and every mode. leeway hands it down like any port, in the environment, `{{PORT_DB}}` and
 `{{LEEWAY_ENV}}`, and marks it `pinned` in its table. It is never part of a range: the agent guard ignores it, and `leeway list` and
 `leeway kill` never reach it. A pinned port inside one of the machine's pools is refused, since `leeway kill --orphans` would kill it
-there. A name can't be in both `ports` and `pinned`. For a worktree that needs its own copy, move the entry to `ports` there without
+there. A name can't be in both `ports` and `pinned`, and a pinned port can't equal a default port. For a worktree that needs its own copy, move the entry to `ports` there without
 committing it; its next claim grows the range by one.
 
 leeway finds the config by walking up from the current directory; the nearest `leeway.json` wins, and the folder holding it is the
@@ -86,9 +86,10 @@ A folder's range comes from the machine's pools, 21000-29999 unless set otherwis
 [`leeway pools`](#leeway-pools-set-start-end--reset), and recorded in the registry, `~/.leeway/ranges.json`. Every repo on the machine
 shares both, so no two folders get the same ports.
 
-- A range is exactly as wide as the catalogue. Adding, reordering or renaming port names moves no port; removing one moves only the ports
-  that fell outside the narrower range.
-- A folder keeps its range while its ports are free (or held by its own servers). Otherwise the range moves to free ports and leeway warns:
+- A range is exactly as wide as the catalogue. Reordering port names or renaming one moves no port, and neither does adding one while the
+  wider range fits; removing one moves only the ports that fell outside the narrower range.
+- A folder keeps its range until `leeway move`, or until the range no longer fits: it leaves its pool, the OS refuses one of its ports, or
+  a grown catalogue reaches into another folder's range or onto a port in use. Then the range moves to free ports and leeway warns:
   restart anything still on the old ports.
 - leeway can't tell the folder's own servers from something else on one of its ports, so a claim that finds one in use keeps the range
   and names the holder with the fix: `leeway kill` for a server of this folder that should not still be running, [`leeway move`](#leeway-move) for anything else.
@@ -209,7 +210,9 @@ folder still claims its own range, and an explicit `--default` or `--inherit` ke
 - The command runs through the system shell (`sh`, `cmd.exe` on Windows).
 - leeway exits with the shell's exit code (a missing command: 127 from `sh`, 1 from `cmd.exe`; a command killed by a signal: usually
   128 plus the signal number from `sh`), or 1 if the shell itself died from a signal or could not start.
-- Stopping leeway (Ctrl+C, a signal, closing the terminal) stops the whole command tree.
+- Stopping leeway stops the whole command tree: Ctrl+C, `Ctrl+\`, closing the terminal, or SIGINT, SIGTERM, SIGHUP
+  or SIGQUIT on Linux and macOS; Ctrl+C, Ctrl+Break or closing the console on Windows. On Linux and macOS the tree gets the signal
+  leeway got, so a command that handles it and keeps running is not stopped ([Limits](#limits)).
 
 `leeway --help` (or `-h`) prints the usage, `leeway --version` the version.
 
@@ -315,8 +318,10 @@ folders:
 Kills every process tree listening in this folder's range, or with a port, in the range that contains it (any repo's). A listener started
 under `leeway` is killed with the nearest `leeway` run above it and that run's whole tree, so a watcher between them (`tsx watch`,
 `nodemon`) can't restart it; that takes down whatever else the run started too, like a `tsc --watch` beside the server under the same
-`concurrently`. A port in a pool outside every range is an orphan: `leeway kill <port>` kills just the listeners on that port, never
-their run. Ports outside every range and every pool are refused. `leeway kill --orphans` kills every orphan in every pool the same way,
+`concurrently`. Run under that same `leeway` run (an agent started as `leeway claude`, a script under `leeway concurrently`), `leeway
+kill` spares the run and itself: it kills the topmost process between the listener and them, watcher included. A listener that is
+itself above `leeway kill`, like a server that runs it, is left running and reported as failed, and the exit code is 1. A port in a
+pool outside every range is an orphan: `leeway kill <port>` kills just the listeners on that port, never their run. Ports outside every range and every pool are refused. `leeway kill --orphans` kills every orphan in every pool the same way,
 exactly the ones `leeway list` shows, and leaves living ranges alone.
 
 ### `leeway move`
@@ -324,6 +329,17 @@ exactly the ones `leeway list` shows, and leaves living ranges alone.
 Claims this folder a new range sharing no port with its current one, for when something else holds one of its ports. It prints the new
 ports and the moved warning, and kills nothing: restart the folder's servers so they take the new ports. A folder without a range gets a
 plain claim.
+
+Whatever still listens on the old range keeps running as an orphan, which `leeway kill` in the folder no longer reaches: the folder's own
+servers, and the process that held the port. leeway can't tell them apart, so `leeway move` names each one with the command that stops it,
+for the ones that are yours to stop:
+
+```
+leeway: range moved from 21000-21001 to 21002-21003; restart anything still using the old ports
+  pid 5120  21000  still listening; if it's this folder's, stop it with leeway kill 21000
+```
+
+If it can't scan for them, it says so instead; the range has moved all the same.
 
 ### `leeway release [<folder>]`
 
@@ -387,6 +403,20 @@ Windows and `leeway pools set 25000-29999` in WSL.
 
 **Other agents** (Codex, Gemini CLI, Cursor, Copilot, Aider, ...): tell them in `AGENTS.md` to start servers with
 `leeway <command>`. Where the agent sets a marker, turning on the agent guard catches the times it forgets.
+
+**Sandboxes**: a claim that changes nothing only reads `~/.leeway`; anything else writes to it. A sandbox that limits writes to the
+working folder makes those writes fail, naming the folder. Allow writes to it, in Claude Code with `sandbox.filesystem.allowWrite`, or run
+the same command once outside the sandbox:
+
+```json
+{
+    "sandbox": {
+        "filesystem": { "allowWrite": ["~/.leeway"] }
+    }
+}
+```
+
+On Linux the folder must exist for that entry to apply: `mkdir -p ~/.leeway` first.
 
 ## Recipes
 
@@ -492,6 +522,8 @@ eval "$(npx leeway env --export)"
   it still reads keys from stdin, but tools that open `/dev/tty` directly (some password prompts, full-screen TUIs) fail.
 - Ctrl+Z on Linux and macOS suspends `leeway` alone: the command, in its own session, keeps running on its ports. `fg`, then Ctrl+C,
   stops it.
+- On Linux and macOS a command that handles a signal and keeps running can outlive `leeway` and stay on its ports: a JVM prints a
+  thread dump on `Ctrl+\` and carries on, while the `sh` above it dies and `leeway` exits. `leeway kill` stops it.
 - `nohup leeway <command>` doesn't outlive the terminal: `leeway` still gets the hangup and stops the command tree. In bash or zsh, use
   `leeway <command> > leeway.log 2>&1 & disown` instead.
 - On Windows, Ctrl+C force-kills the command tree at once, so a command that cleans up on Ctrl+C may die before it finishes. Run such a

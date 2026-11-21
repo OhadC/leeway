@@ -1,13 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import schema from "../schema.json" with { type: "json" };
-import type { LeewayConfig } from "./dev-ports.ts";
+import type { LeewayConfig, LeewayPinnedPorts } from "./dev-ports.ts";
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const SETTINGS = Object.keys(schema.properties).filter(key => key !== "$schema");
 
 const PORTS_SHAPE = '{ "NAME": { "port": <integer 1-65535> } }';
+
+const BYTE_ORDER_MARK = String.fromCharCode(0xfeff);
 
 export type FoundConfig = {
     folder: string;
@@ -90,7 +92,7 @@ export class ConfigFile {
         }
 
         ConfigFile.checkCaseClash([...Object.keys(content.ports), ...Object.keys(pinned)], file);
-        ConfigFile.checkSharedPort(content.ports as LeewayConfig["ports"], file);
+        ConfigFile.checkSharedPort(content.ports as LeewayConfig["ports"], pinned as LeewayPinnedPorts, file);
 
         return content as LeewayConfig;
     }
@@ -111,17 +113,25 @@ export class ConfigFile {
         }
     }
 
-    private static checkSharedPort(ports: LeewayConfig["ports"], file: string): void {
-        const seen = new Map<number, string>();
+    private static checkSharedPort(ports: LeewayConfig["ports"], pinned: LeewayPinnedPorts, file: string): void {
+        const defaultPorts = new Map<number, string>();
 
         for (const [name, { port }] of Object.entries(ports)) {
-            const clash = seen.get(port);
+            const clash = defaultPorts.get(port);
 
             if (clash !== undefined) {
                 throw new Error(`leeway: ${clash} and ${name} in ${file} both have port ${port}`);
             }
 
-            seen.set(port, name);
+            defaultPorts.set(port, name);
+        }
+
+        for (const [name, { port }] of Object.entries(pinned)) {
+            const clash = defaultPorts.get(port);
+
+            if (clash !== undefined) {
+                throw new Error(`leeway: ${clash} and ${name} in ${file} both have port ${port}`);
+            }
         }
     }
 
@@ -148,7 +158,8 @@ export class ConfigFile {
     }
 
     private static readJson(file: string): unknown {
-        const text = fs.readFileSync(file, "utf8");
+        const content = fs.readFileSync(file, "utf8");
+        const text = content.startsWith(BYTE_ORDER_MARK) ? content.slice(BYTE_ORDER_MARK.length) : content;
 
         try {
             return JSON.parse(text);

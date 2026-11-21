@@ -74,6 +74,10 @@ claim's lock. The holder touches its token every two seconds, so a slow claim is
 its token is still in the lock; when it isn't, because the holder was paused or the machine slept past ten seconds, it writes nothing, takes
 the lock again and redoes its work. This changes no lock on disk, so older leeways keep working beside it
 ([0002](0002-forward-compatible-registry.md)). A claim that waits over 30 seconds on a lock it cannot break fails, naming the lock. The registry is written atomically (temp file, rename).
+A claim is first planned from the registry as read without the lock. When the plan leaves the registry as it was, the claim returns it
+and writes nothing, so it works where the registry folder refuses writes, as in an agent sandbox. That is safe: the registry is only ever
+replaced whole, and other folders' claims already stay out of a stored range. Otherwise the claim takes the lock, reads and plans again,
+and writes. Windows refuses a rename over a file another process is reading, so the write retries the rename for about a second.
 
 **Unknown data.** The registry is forward-compatible, as [0002](0002-forward-compatible-registry.md) records: no leeway refuses it
 because of its `version`, every write keeps data it doesn't understand, and every readable range holds its ports. One that isn't a
@@ -97,8 +101,8 @@ shell line with it fails rather than lose its quotes.
 
 **Environment variables are the transport.** They pass through `concurrently`, `tsx`, package scripts and shells to every child process
 with no integration. `leeway` runs the command through the system shell: one argument is a shell line, several are an argv quoted for
-the shell. Stopping leeway stops the tree: on POSIX the command gets its own process group and SIGINT, SIGTERM and SIGHUP are forwarded to
-it; on Windows, which has no process groups to signal, Ctrl+C, Ctrl+Break and console close run `taskkill /T /F`.
+the shell. Stopping leeway stops the tree: on POSIX the command gets its own process group and SIGINT, SIGTERM, SIGHUP and SIGQUIT are
+forwarded to it; on Windows, which has no process groups to signal, Ctrl+C, Ctrl+Break and console close run `taskkill /T /F`.
 
 **Browser and vite.** `devPorts` is browser-safe. `leeway/vite` sets `server.port` and `preview.port` with `strictPort`, so a taken port
 fails instead of drifting. `preview.port` uses the dev server's port name unless `preview` names another: left alone, vite previews on
@@ -120,8 +124,11 @@ outside every living range. A registry-only listing can't tell a running server 
 `leeway kill [<port> | --orphans]` kills the listeners in this folder's range or in the range holding the port, or, for an orphan port in
 any pool, just the listeners on it, and with `--orphans` every orphan's listeners that way; a port outside every range and every pool is refused. In a range, a listener started under `leeway` is killed with the nearest `leeway` run
 above it and that run's tree, found by walking parent pids in a fresh process table and recognising the run by its command line
-(`leeway/dist/cli.mjs`). Killing only the listener left watchers (`tsx watch`) alive to restart it on the next file change. An orphan's run
-is spared: it can be a moved range's old server under a run that also serves the current range. Recording each run's pid in the registry was
+(`leeway/dist/cli.mjs`). Killing only the listener left watchers (`tsx watch`) alive to restart it on the next file change. A run
+above `leeway kill` itself is never a range kill's target, since its tree holds the kill, which would die before it reports: the kill takes the
+topmost process above the listener that is not above the kill, and refuses a listener that is. An orphan's run
+is spared: it can be a moved range's old server under a run that also serves the current range. An orphan kill does not look for
+its own ancestors, so a listener above it is killed like any other. Recording each run's pid in the registry was
 rejected: it puts lock contention on every run, leaves stale pids after a hard kill, and a reused pid would kill an unrelated tree; the live
 table has none of that. On Windows a parent pid is ignored when that process started after its child, since Windows reuses the pids of
 exited parents. `leeway list --json` prints the listing for tools, so they never parse the registry or filter out its deleted folders. The

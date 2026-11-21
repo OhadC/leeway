@@ -2,6 +2,7 @@ import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
+import readline from "node:readline";
 import { afterEach, describe, expect, it } from "vitest";
 import { RangeRegistry } from "../src/registry/range-registry.ts";
 import { LeewayCli } from "./leeway-cli.ts";
@@ -99,6 +100,35 @@ describe("leeway list and kill", () => {
         await new Promise(resolve => setTimeout(resolve, 1000));
         expect(await Listeners.accepts(ports.PORT_WEB)).toBe(false);
         await exited;
+    }, 60_000);
+
+    it("kills a listener and its watcher under the leeway run that this leeway kill shares, sparing the run", async () => {
+        const { dir, home, ports } = claimedFolder();
+        fs.writeFileSync(path.join(dir, "watcher.mjs"), Listeners.watcherScript);
+        fs.writeFileSync(path.join(dir, "runner.mjs"), killingScript('spawn(process.execPath, ["watcher.mjs"], { stdio: "inherit" })'));
+        const leeway = LeewayCli.start(["node", "runner.mjs"], dir, home);
+
+        servers.push(leeway);
+        const kill = await killReport(leeway);
+
+        expect(kill.status).toBe(0);
+        expect(kill.stdout).toContain(`PORT_WEB ${ports.PORT_WEB}  killed`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        expect(await Listeners.accepts(ports.PORT_WEB)).toBe(false);
+        expect(leeway.exitCode).toBeNull();
+    }, 60_000);
+
+    it("refuses to kill a listener above this leeway kill, leaving it listening", async () => {
+        const { dir, home, ports } = claimedFolder();
+        fs.writeFileSync(path.join(dir, "server.mjs"), killingScript("net.createServer().listen(Number(process.env.PORT_WEB))"));
+        const leeway = LeewayCli.start(["node", "server.mjs"], dir, home);
+
+        servers.push(leeway);
+        const kill = await killReport(leeway);
+
+        expect(kill.status).toBe(1);
+        expect(kill.stdout).toContain(`PORT_WEB ${ports.PORT_WEB}  failed: above this leeway kill`);
+        expect(await Listeners.accepts(ports.PORT_WEB)).toBe(true);
     }, 60_000);
 
     it("kills an orphan listening in the pool outside every range", async () => {
@@ -293,6 +323,35 @@ describe("leeway release", () => {
     }, 60_000);
 });
 
+describe("leeway move", () => {
+    it("names what still listens on the old range, with the kill that stops it", async () => {
+        const { dir, home, ports } = claimedFolder();
+        const server = await startServer(ports.PORT_WEB);
+
+        const moved = LeewayCli.run(["move"], dir, home);
+        const killed = LeewayCli.run(["kill", String(ports.PORT_WEB)], dir, home);
+
+        expect(moved.status).toBe(0);
+        expect(moved.stderr).toMatch(
+            new RegExp(
+                `\\n  pid ${server.pid}  ${ports.PORT_WEB}  still listening; if it's this folder's, stop it with leeway kill ${ports.PORT_WEB}\\n$`,
+            ),
+        );
+        expect(killed.status).toBe(0);
+        expect(await Listeners.accepts(ports.PORT_WEB)).toBe(false);
+    }, 60_000);
+
+    it("names nothing when nothing listens on the old range", () => {
+        const { dir, home, ports } = claimedFolder();
+
+        const moved = LeewayCli.run(["move"], dir, home);
+
+        expect(moved.status).toBe(0);
+        expect(moved.stderr).toMatch(/restart anything still using the old ports\n$/);
+        expect(moved.stderr).not.toContain(`leeway kill ${ports.PORT_WEB}`);
+    }, 60_000);
+});
+
 describe.runIf(process.platform === "linux")("leeway list and kill without the linux scan tools", () => {
     it("names iproute2 when ss is not on PATH, while a claim still works", () => {
         const { dir, home } = LeewayCli.folder();
@@ -326,6 +385,31 @@ function claimedFolder() {
     const ports = LeewayCli.exportedPorts(LeewayCli.run(["env", "--export"], folder.dir, folder.home).stdout);
 
     return { ...folder, ports };
+}
+
+function killingScript(startListener: string): string {
+    return `import { spawn, spawnSync } from "node:child_process";
+import net from "node:net";
+${startListener};
+const accepts = () => new Promise(resolve => {
+    const socket = net.connect(Number(process.env.PORT_WEB), "127.0.0.1", () => { socket.destroy(); resolve(true); });
+    socket.once("error", () => resolve(false));
+});
+while (!(await accepts())) await new Promise(resolve => setTimeout(resolve, 100));
+const kill = spawnSync(process.execPath, [${JSON.stringify(LeewayCli.cliPath)}, "kill"], { encoding: "utf8" });
+console.log(JSON.stringify({ status: kill.status, stdout: kill.stdout }));
+setInterval(() => {}, 1000);
+`;
+}
+
+async function killReport(leeway: ChildProcess): Promise<{ status: number | null; stdout: string }> {
+    for await (const line of readline.createInterface({ input: leeway.stdout! })) {
+        if (line.startsWith("{")) {
+            return JSON.parse(line);
+        }
+    }
+
+    throw new Error("leeway exited before the kill reported");
 }
 
 function shown(dir: string): string {
