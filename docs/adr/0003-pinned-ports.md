@@ -13,7 +13,8 @@ repo loses its one file of ports and the one `devPorts` call that reads them, an
 ## Decision
 
 **A separate section.** The config gains `pinned` beside `ports`: `{ "pinned": { "NAME": { "port": <port>, ...any props } } }`, the same
-entry shape as the catalogue. A name in both sections is refused, and `LEEWAY_ENV` and `LEEWAY_FOLDER` are reserved in both, as in the catalogue.
+entry shape as the catalogue. A name in both sections is refused, so is a pinned port equal to a
+default port, since `--default` would hand both names the same port, and `LEEWAY_ENV` and `LEEWAY_FOLDER` are reserved in both, as in the catalogue.
 
 **Resolved like every port, never ranged.** `devPorts` returns catalogue and pinned ports alike, each from its environment variable, else
 the config. The CLI hands pinned ports down in every mode, through the environment, `{{NAME}}`, `{{LEEWAY_ENV}}` and `env --export`, and

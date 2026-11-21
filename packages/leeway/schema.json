@@ -22,7 +22,7 @@
             }
         },
         "pinned": {
-            "description": "Pinned ports: ports every folder uses at once, like a local Postgres, keyed by port name. Each keeps its port in every folder and mode and is never part of a range; a name can not also be in ports.",
+            "description": "Pinned ports: ports every folder uses at once, like a local Postgres, keyed by port name. Each keeps its port in every folder and mode and is never part of a range; a name can not also be in ports, and a pinned port can not equal a default port.",
             "type": "object",
             "propertyNames": {
                 "$ref": "#/definitions/portName"

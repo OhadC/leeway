@@ -191,10 +191,19 @@ describe("ConfigFile.find", () => {
 
     it("accepts pinned ports sharing a port, two names for one Postgres", () => {
         const folder = tempFolder();
-        const pinned = { PORT_DB: { port: 5432 }, PGPORT: { port: 5432 }, PORT_WEB_PINNED: { port: 3000 } };
+        const pinned = { PORT_DB: { port: 5432 }, PGPORT: { port: 5432 } };
         writeConfig(folder, { ports: { PORT_WEB: { port: 3000 } }, pinned });
 
         expect(ConfigFile.find(folder).config.pinned).toEqual(pinned);
+    });
+
+    it("refuses a pinned port equal to a default port, which default ports would hand to two names", () => {
+        const folder = tempFolder();
+        writeConfig(folder, { ports: { PORT_WEB: { port: 5432 } }, pinned: { POSTGRES_PORT: { port: 5432 } } });
+
+        expect(() => ConfigFile.find(folder)).toThrowError(
+            `leeway: PORT_WEB and POSTGRES_PORT in ${path.join(folder, "leeway.json")} both have port 5432`,
+        );
     });
 
     it.each([
@@ -232,6 +241,17 @@ describe("ConfigFile.find", () => {
         writeConfig(folder, { ports: { LOW: { port: 1 }, HIGH: { port: 65535 } } });
 
         expect(ConfigFile.find(folder).config.ports).toEqual({ LOW: { port: 1 }, HIGH: { port: 65535 } });
+    });
+
+    it("reads a config that starts with a byte order mark, as Windows editors write it", () => {
+        const folder = tempFolder();
+        const byteOrderMark = Buffer.from([0xef, 0xbb, 0xbf]);
+        fs.writeFileSync(
+            path.join(folder, "leeway.json"),
+            Buffer.concat([byteOrderMark, Buffer.from(JSON.stringify({ ports: { PORT_WEB: { port: 5173 } } }))]),
+        );
+
+        expect(ConfigFile.find(folder).config.ports).toEqual({ PORT_WEB: { port: 5173 } });
     });
 
     it("refuses a config that is not JSON, naming the file", () => {
