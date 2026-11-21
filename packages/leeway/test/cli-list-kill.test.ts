@@ -311,6 +311,18 @@ describe("leeway release", () => {
         expect(JSON.parse(listed.stdout).orphans).toEqual([{ port: ports.PORT_WEB, pid: server.pid }]);
     }, 60_000);
 
+    it("releases and says so when the listener scan fails", () => {
+        const { dir, home, ports } = claimedFolder();
+        const pathName = Object.keys(process.env).find(name => name.toUpperCase() === "PATH") ?? "PATH";
+
+        const result = LeewayCli.run(["release"], dir, home, { [pathName]: LeewayCli.temporaryDir("leeway-path-") });
+
+        expect(result.status).toBe(0);
+        expect(result.stdout).toBe(`leeway: released ${ports.PORT_WEB}-${ports.PORT_API} for ${shown(dir)}\n`);
+        expect(result.stderr).toBe(`leeway: could not check ${ports.PORT_WEB}-${ports.PORT_API} for servers still listening\n`);
+        expect(LeewayCli.claimedFolders(home)).toEqual([]);
+    }, 60_000);
+
     it("calls no listener an orphan when the released range lies outside the pools", async () => {
         const { dir, home, ports } = claimedFolder();
         await startServer(ports.PORT_WEB);

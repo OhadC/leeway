@@ -58,13 +58,29 @@ export class ProcessTree {
                 ProcessTree.killTree(top);
                 [top, ...ProcessTree.pidsOfTree(top, rows)].forEach(member => killed.add(member));
             } catch (error) {
-                if (ProcessTree.isRunning(top)) {
+                if (ProcessTree.isRunning(top) || (error as NodeJS.ErrnoException).code === "EPERM") {
                     failures.set(pid, error instanceof Error ? error.message : String(error));
                 }
             }
         });
 
         return failures;
+    }
+
+    static killEach(pids: readonly number[], kill: (pid: number) => void = pid => process.kill(pid, "SIGKILL")): void {
+        const failures = pids.flatMap(pid => {
+            try {
+                kill(pid);
+
+                return [];
+            } catch (error) {
+                return (error as NodeJS.ErrnoException).code === "ESRCH" ? [] : [error];
+            }
+        });
+
+        if (failures.length > 0) {
+            throw failures[0];
+        }
     }
 
     static rows(platform: NodeJS.Platform = process.platform, run: CommandRunner = OsCommand.run): ProcessRow[] {
@@ -176,14 +192,6 @@ export class ProcessTree {
             throw new Error(`leeway: no process with pid ${pid}`);
         }
 
-        tree.forEach(member => {
-            try {
-                process.kill(member, "SIGKILL");
-            } catch (error) {
-                if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
-                    throw error;
-                }
-            }
-        });
+        ProcessTree.killEach(tree);
     }
 }

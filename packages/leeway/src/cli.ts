@@ -169,20 +169,14 @@ async function moveRange(found: FoundConfig): Promise<void> {
     printClaim(found, claim);
 
     if (claim.previous) {
-        process.stderr.write(orphanLinesOrScanFailure(claim.previous));
-    }
-}
-
-function orphanLinesOrScanFailure(previous: RangeEntry): string {
-    try {
-        return listenersLeftIn(previous, RangeRegistry.pools())
-            .map(
-                ({ pid, port }) =>
-                    `  pid ${pid ?? "?"}  ${port}  still listening; if it's this folder's, stop it with leeway kill ${port}\n`,
-            )
-            .join("");
-    } catch {
-        return `leeway: could not check ${previous.start}-${previous.end} for servers still listening\n`;
+        process.stderr.write(
+            listenersLeftIn(claim.previous, RangeRegistry.pools())
+                .map(
+                    ({ pid, port }) =>
+                        `  pid ${pid ?? "?"}  ${port}  still listening; if it's this folder's, stop it with leeway kill ${port}\n`,
+                )
+                .join(""),
+        );
     }
 }
 
@@ -190,15 +184,24 @@ async function releaseRange(folder: string | undefined): Promise<void> {
     const pools = RangeRegistry.pools();
     const released = await RangeRegistry.release(folder === undefined ? ConfigFile.find(process.cwd()).folder : path.resolve(folder));
 
-    const orphanLines = listenersLeftIn(released, pools)
-        .map(({ pid, port }) => `  pid ${pid ?? "?"}  ${port}  still listening, now an orphan; stop it with leeway kill ${port}\n`)
-        .join("");
-
-    process.stdout.write(`leeway: released ${released.start}-${released.end} for ${released.folder}\n${orphanLines}`);
+    process.stdout.write(`leeway: released ${released.start}-${released.end} for ${released.folder}\n`);
+    process.stdout.write(
+        listenersLeftIn(released, pools)
+            .map(({ pid, port }) => `  pid ${pid ?? "?"}  ${port}  still listening, now an orphan; stop it with leeway kill ${port}\n`)
+            .join(""),
+    );
 }
 
 function listenersLeftIn({ start, end }: RangeEntry, pools: Pool[]): PortListener[] {
-    return ListenerScan.listeners().filter(listener => listener.port >= start && listener.port <= end && Pools.holds(pools, listener.port));
+    try {
+        return ListenerScan.listeners().filter(
+            listener => listener.port >= start && listener.port <= end && Pools.holds(pools, listener.port),
+        );
+    } catch {
+        process.stderr.write(`leeway: could not check ${start}-${end} for servers still listening\n`);
+
+        return [];
+    }
 }
 
 function printPools(): void {
