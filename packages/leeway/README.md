@@ -208,11 +208,14 @@ folder still claims its own range, and an explicit `--default` or `--inherit` ke
   shell when needed, so `leeway node -e "console.log(1)"` runs exactly that. On Windows a `.cmd` shim re-parses its arguments, so an
   argument holding both `"` and a cmd metacharacter like `&` can still break there.
 - The command runs through the system shell (`sh`, `cmd.exe` on Windows).
-- leeway exits with the shell's exit code (a missing command: 127 from `sh`, 1 from `cmd.exe`; a command killed by a signal: usually
-  128 plus the signal number from `sh`), or 1 if the shell itself died from a signal or could not start.
+- The command's port variables replace any variable of the same name in leeway's environment, in any case: on Windows a `PORT_WEB` in
+  the shell does not shadow a `port_web` port name.
+- leeway exits with the shell's exit code (a missing command: 127 from `sh`, 1 from `cmd.exe`), 128 plus the signal number when the
+  command or the shell died from a signal (130 for Ctrl+C), or 1 if the shell could not start.
 - Stopping leeway stops the whole command tree: Ctrl+C, `Ctrl+\`, closing the terminal, or SIGINT, SIGTERM, SIGHUP
   or SIGQUIT on Linux and macOS; Ctrl+C, Ctrl+Break or closing the console on Windows. On Linux and macOS the tree gets the signal
-  leeway got, so a command that handles it and keeps running is not stopped ([Limits](#limits)).
+  leeway got, so a command that handles it and keeps running is not stopped ([Limits](#limits)). A terminal resize (SIGWINCH)
+  reaches the command too, so a TUI redraws.
 
 `leeway --help` (or `-h`) prints the usage, `leeway --version` the version.
 
