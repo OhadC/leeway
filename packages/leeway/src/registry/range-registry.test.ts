@@ -729,7 +729,7 @@ describe("RangeRegistry pools", () => {
 
     it("waits for a claim holding the registry lock before setting the pools", async () => {
         const registryPath = createRegistryPath();
-        const holder = heldClaim(registryPath, "/holder");
+        const holder = heldFirstClaim(registryPath, "/holder");
         await holder.locked;
 
         const setting = settledFlag(RangeRegistry.setPools(["3000-3999"], registryPath));
@@ -828,7 +828,7 @@ describe("RangeRegistry.release", () => {
             version: 1,
             folders: { "/repo": { start: 21005, end: 21005, ports: { PORT_A: 21005 } } },
         });
-        const holder = heldClaim(registryPath, "/holder");
+        const holder = heldFirstClaim(registryPath, "/holder");
         await holder.locked;
 
         const releasing = settledFlag(RangeRegistry.release("/repo", "linux", registryPath));
@@ -845,7 +845,7 @@ describe("RangeRegistry.release", () => {
 describe("RangeRegistry.claim lock", () => {
     it("waits while another claim holds the lock, then claims once it finishes", async () => {
         const registryPath = createRegistryPath();
-        const holder = heldClaim(registryPath, "/holder");
+        const holder = heldFirstClaim(registryPath, "/holder");
         await holder.locked;
 
         const waiter = settledFlag(claim(registryPath, "/repo", ["PORT_A"]));
@@ -893,7 +893,7 @@ describe("RangeRegistry.claim lock", () => {
         const registryPath = createRegistryPath();
         let clock = Date.now();
         const now = () => clock;
-        const holder = heldClaim(registryPath, "/holder", { now });
+        const holder = heldFirstClaim(registryPath, "/holder", { now });
         await holder.locked;
 
         clock += 11_000;
@@ -913,9 +913,9 @@ describe("RangeRegistry.claim lock", () => {
 
     it("redoes a claim that lost its lock while it worked, after the claim that broke it finishes", async () => {
         const registryPath = createRegistryPath();
-        const slow = heldClaim(registryPath, "/slow");
+        const slow = heldFirstClaim(registryPath, "/slow");
         await slow.locked;
-        const breaker = heldClaim(registryPath, "/breaker", { now: () => Date.now() + 11_000 });
+        const breaker = heldFirstClaim(registryPath, "/breaker", { now: () => Date.now() + 11_000 });
         await breaker.locked;
         const slowClaim = settledFlag(slow.claimed);
 
@@ -1029,6 +1029,36 @@ describe("RangeRegistry.claim that changes nothing", () => {
     });
 });
 
+describe("RangeRegistry.claim port tests", () => {
+    const stored = { start: 21010, end: 21011, ports: { PORT_A: 21010, PORT_B: 21011 } };
+
+    it.each<[string, string, Partial<ClaimRangeOptions>]>([
+        ["a first claim", "/new", {}],
+        ["a move", "/repo", { move: true }],
+    ])("tests each port once for %s", async (_, folder, overrides) => {
+        const registryPath = createRegistryPath({ version: 1, folders: { "/repo": stored } });
+        const tested: number[] = [];
+
+        await claim(registryPath, folder, ["PORT_A", "PORT_B"], { testPort: recordingPortTest(tested), ...overrides });
+
+        expect(tested).toEqual([21000, 21001]);
+    });
+
+    it("tests each port once while planning a claim whose stored range lost a port", async () => {
+        const registryPath = createRegistryPath({ version: 1, folders: { "/repo": stored } });
+        holdLockUnbreakably(registryPath);
+        const tested: number[] = [];
+
+        const claiming = claim(registryPath, "/repo", ["PORT_A", "PORT_B"], {
+            testPort: recordingPortTest(tested, { 21011: "unavailable" }),
+            now: impatientClock(),
+        });
+
+        await expect(claiming).rejects.toThrow("waiting for the lock");
+        expect(tested).toEqual([21010, 21011, 21000, 21001]);
+    });
+});
+
 describe("RangeRegistry.testPort", () => {
     it("reports a port with a loopback listener as in use, and the same port free once the listener closes", async () => {
         const server = net.createServer();
@@ -1139,19 +1169,14 @@ function claim(registryPath: string, folder: string, names: string[], overrides:
     });
 }
 
-function heldClaim(registryPath: string, folder: string, overrides: Partial<ClaimRangeOptions> = {}) {
+function heldFirstClaim(registryPath: string, folder: string, overrides: Partial<ClaimRangeOptions> = {}) {
     let markLocked!: () => void;
     let finish!: () => void;
     const locked = new Promise<void>(resolve => (markLocked = resolve));
     const finished = new Promise<void>(resolve => (finish = resolve));
-    let portTests = 0;
     const testPort = async () => {
-        const isUnlockedPlan = ++portTests === 1;
-
-        if (!isUnlockedPlan) {
-            markLocked();
-            await finished;
-        }
+        markLocked();
+        await finished;
 
         return "free" as const;
     };
@@ -1188,6 +1213,14 @@ function pause(ms: number): Promise<void> {
 
 function escaped(text: string): string {
     return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function recordingPortTest(tested: number[], states: Record<number, PortBindState> = {}): ClaimRangeOptions["testPort"] {
+    return async port => {
+        tested.push(port);
+
+        return states[port] ?? "free";
+    };
 }
 
 function portStates(states: Record<number, PortBindState>): ClaimRangeOptions["testPort"] {

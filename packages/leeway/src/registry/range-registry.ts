@@ -73,10 +73,12 @@ export class RangeRegistry {
 
     static async claim(options: ClaimRangeOptions): Promise<RangeClaim> {
         const registry = RangeRegistry.read(options.registryPath);
-        const plan = await RangeRegistry.planClaim(options, registry);
+        if (!options.move && RangeRegistry.hasReadableRange(registry, options.folder, options.platform)) {
+            const plan = await RangeRegistry.planClaim(options, registry);
 
-        if (isDeepStrictEqual(plan.registry, registry)) {
-            return plan.claim;
+            if (isDeepStrictEqual(plan.registry, registry)) {
+                return plan.claim;
+            }
         }
 
         return RangeRegistry.whileLocked(options.registryPath, options.now, async write => {
@@ -157,17 +159,20 @@ export class RangeRegistry {
         return platform === "win32" ? path.win32.resolve(folder).toLowerCase() : path.posix.resolve(folder);
     }
 
+    private static hasReadableRange(registry: RegistryFile, folder: string, platform: NodeJS.Platform): boolean {
+        return Object.entries(registry.folders).some(
+            ([key, value]) => RangeRegistry.isSameFolder(key, folder, platform) && RangeRegistry.readableRange(value) !== undefined,
+        );
+    }
+
     private static async planClaim(
         { registryPath, folder: folderPath, names, pinned = {}, move = false, platform, pathExists, testPort }: ClaimRangeOptions,
         registry: RegistryFile,
     ): Promise<{ registry: RegistryFile; claim: RangeClaim }> {
-        const portsInUse = new Set<number>();
-        const testAndRecordPort = async (port: number) => {
-            const state = await testPort(port);
-
-            if (state === "in-use") {
-                portsInUse.add(port);
-            }
+        const portStates = new Map<number, PortBindState>();
+        const testPortOnce = async (port: number) => {
+            const state = portStates.get(port) ?? (await testPort(port));
+            portStates.set(port, state);
 
             return state;
         };
@@ -183,11 +188,10 @@ export class RangeRegistry {
         const ownKeys = Object.fromEntries(own.flatMap(([, value]) => (isObject(value) ? Object.entries(value) : [])));
         const others = entries.filter(pair => !isOwn(pair));
         const keepable = move ? undefined : current;
-        const kept =
-            keepable && (await RangeRegistry.keep(keepable, names, RangeRegistry.readableRanges(others), pools, testAndRecordPort));
+        const kept = keepable && (await RangeRegistry.keep(keepable, names, RangeRegistry.readableRanges(others), pools, testPortOnce));
         const living = kept ? others : others.filter(([key]) => pathExists(key));
         const occupied = [...RangeRegistry.readableRanges(living), ...(move && current ? [current] : [])];
-        const range = kept ?? (await RangeRegistry.place(keepable, occupied, names, pools, testAndRecordPort));
+        const range = kept ?? (await RangeRegistry.place(keepable, occupied, names, pools, testPortOnce));
 
         if (!range) {
             throw new Error(
@@ -200,7 +204,7 @@ export class RangeRegistry {
             claim: {
                 entry: { folder, ...range },
                 previous: current && { folder, ...current },
-                inUse: Object.fromEntries(Object.entries(range.ports).filter(([, port]) => portsInUse.has(port))),
+                inUse: Object.fromEntries(Object.entries(range.ports).filter(([, port]) => portStates.get(port) === "in-use")),
             },
         };
     }
